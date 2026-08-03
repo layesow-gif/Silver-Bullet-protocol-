@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<meta name="apple-mobile-web-app-title" content="Silver Bullet" />
+<title>Silver Bullet Protocol</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    background: #09090b;
+    color: #f4f4f5;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding-bottom: 60px;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 28px 18px 40px; }
+  .eyebrow { font-size: 11px; letter-spacing: .25em; text-transform: uppercase; color: #d4a24e; margin-bottom: 6px; }
+  h1 { font-size: 24px; font-weight: 650; letter-spacing: -0.01em; margin: 0 0 6px; }
+  .sub { font-size: 13px; color: #71717a; margin: 0; line-height: 1.4; }
+  .headerRow { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 26px; }
+  .resetBtn {
+    flex-shrink: 0; display: flex; align-items: center; gap: 6px;
+    font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+    color: #a1a1aa; background: transparent; border: 1px solid #27272a;
+    border-radius: 8px; padding: 9px 12px;
+  }
+  .resetBtn:active { border-color: #52525b; color: #f4f4f5; }
+
+  .timeline { display: flex; gap: 4px; margin-bottom: 22px; }
+  .tSeg { flex: 1; }
+  .tBar { height: 6px; border-radius: 99px; background: #27272a; margin-bottom: 6px; transition: background .25s; }
+  .tBar.clear { background: #10b981; }
+  .tBar.active { background: #d4a24e; }
+  .tBar.halted { background: #f43f5e; }
+  .tLabel { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: #52525b; display: none; }
+
+  .biasChip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+    color: #fbbf24; border: 1px solid #78350f; background: rgba(120,53,15,.25);
+    border-radius: 8px; padding: 7px 11px; margin-bottom: 18px;
+  }
+
+  .phaseHead { display: flex; align-items: baseline; gap: 8px; margin: 30px 0 10px; }
+  .phaseHead:first-of-type { margin-top: 0; }
+  .phaseHead h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .18em; color: #71717a; margin: 0; font-weight: 600; }
+  .phaseHead span { font-size: 10px; color: #3f3f46; }
+
+  .card { border: 1px solid #27272a; background: rgba(24,24,27,.6); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+  .cardTop { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .cardTitle { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #52525b; margin-bottom: 3px; }
+  .cardPrompt { font-size: 14px; color: #e4e4e7; line-height: 1.35; }
+
+  .btnRow { display: flex; gap: 6px; flex-shrink: 0; }
+  .yn {
+    width: 38px; height: 38px; border-radius: 8px; border: 1px solid #3f3f46;
+    background: transparent; color: #a1a1aa; display: flex; align-items: center; justify-content: center;
+  }
+  .yn.selected { background: #f4f4f5; border-color: #f4f4f5; color: #09090b; }
+
+  .choiceRow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .choiceBtn {
+    font-size: 12px; font-family: ui-monospace, monospace; padding: 8px 11px;
+    border-radius: 7px; border: 1px solid #3f3f46; background: transparent; color: #a1a1aa;
+  }
+  .choiceBtn.selected { background: #f4f4f5; border-color: #f4f4f5; color: #09090b; }
+
+  .outcome {
+    margin-top: 12px; display: flex; align-items: flex-start; gap: 8px;
+    font-size: 12px; border-radius: 8px; padding: 9px 11px; border: 1px solid; line-height: 1.35;
+  }
+  .outcome.go { border-color: #065f46; background: rgba(6,95,70,.25); color: #34d399; }
+  .outcome.wait { border-color: #78350f; background: rgba(120,53,15,.25); color: #fbbf24; }
+  .outcome.stop { border-color: #881337; background: rgba(136,19,55,.25); color: #fb7185; }
+
+  .banner { margin-top: 30px; border-radius: 12px; padding: 18px; display: flex; gap: 12px; align-items: flex-start; }
+  .banner.stop { border: 1px solid #881337; background: rgba(136,19,55,.3); }
+  .banner.done { border: 1px solid #065f46; background: rgba(6,95,70,.3); }
+  .banner h3 { margin: 0 0 4px; font-size: 14px; font-weight: 650; }
+  .banner.stop h3 { color: #fda4af; }
+  .banner.done h3 { color: #6ee7b7; }
+  .banner p { margin: 0; font-size: 12px; color: #d4d4d8; }
+  .banner .sub2 { color: #71717a; margin-top: 6px; }
+
+  .legend { margin-top: 34px; display: flex; align-items: center; gap: 14px; font-size: 10px; color: #52525b; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+
+  svg { display: block; }
+
+  /* tabs */
+  .topTabs { display: flex; gap: 6px; margin-bottom: 22px; }
+  .topTabBtn { flex: 1; text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+    padding: 10px 6px; border-radius: 8px; border: 1px solid #27272a; color: #a1a1aa; background: transparent; }
+  .topTabBtn.active { background: #f4f4f5; color: #09090b; border-color: #f4f4f5; }
+  .tabView { display: none; }
+  .tabView.active { display: block; }
+
+  /* bias log form */
+  .fieldLabel { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #71717a; margin: 16px 0 8px; }
+  .fieldLabel:first-child { margin-top: 0; }
+  .optRow { display: flex; flex-direction: column; gap: 6px; }
+  .optBtn { text-align: left; padding: 10px 12px; border-radius: 8px; border: 1px solid #27272a; background: rgba(24,24,27,.6); color: #d4d4d8; font-size: 13px; }
+  .optBtn .freq { float: right; color: #52525b; font-size: 11px; }
+  .optBtn.selected { border-color: #d4a24e; background: rgba(120,53,15,.2); color: #f4f4f5; }
+  .optBtn3 { flex: 1; text-align: center; padding: 10px 6px; border-radius: 8px; border: 1px solid #27272a; background: rgba(24,24,27,.6); color: #d4d4d8; font-size: 12px; }
+  .optBtn3.selected { border-color: #d4a24e; background: rgba(120,53,15,.2); color: #f4f4f5; }
+  .optRow3 { display: flex; gap: 6px; }
+  .refTable { margin-top: 10px; border: 1px solid #27272a; border-radius: 8px; padding: 10px 12px; background: rgba(24,24,27,.4); }
+  .refRow { display: flex; justify-content: space-between; font-size: 12px; color: #a1a1aa; padding: 3px 0; }
+  .refRow b { color: #d4a24e; font-weight: 600; }
+  .refNote { font-size: 11px; color: #71717a; margin-top: 6px; line-height: 1.4; }
+  .numInput {
+    width: 100%; background: rgba(24,24,27,.6); border: 1px solid #27272a; color: #f4f4f5;
+    padding: 10px 12px; border-radius: 8px; font-size: 14px; font-family: inherit;
+  }
+  .saveEntryBtn {
+    width: 100%; margin-top: 18px; padding: 12px; border-radius: 8px; border: none;
+    background: #f4f4f5; color: #09090b; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+  }
+  .saveEntryBtn:disabled { opacity: .4; }
+
+  .statsGrid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 22px; }
+  .statBox { border: 1px solid #27272a; border-radius: 8px; padding: 10px; text-align: center; }
+  .statBox .num { font-size: 20px; font-weight: 650; color: #f4f4f5; }
+  .statBox .lbl { font-size: 9px; text-transform: uppercase; color: #71717a; margin-top: 2px; letter-spacing: .04em; }
+
+  .breakdownRow { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #1c1c1f; font-size: 12px; }
+  .breakdownRow .name { color: #d4d4d8; }
+  .breakdownRow .val { color: #d4a24e; font-family: ui-monospace, monospace; }
+
+  .logEntry { border: 1px solid #27272a; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; font-size: 12px; }
+  .logEntry .row1 { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .logEntry .date { color: #71717a; font-family: ui-monospace, monospace; }
+  .logEntry .result { text-transform: uppercase; font-size: 10px; font-weight: 650; letter-spacing: .04em; }
+  .logEntry .result.win { color: #34d399; }
+  .logEntry .result.loss { color: #fb7185; }
+  .logEntry .result.noTrade { color: #71717a; }
+  .logEntry .detail { color: #a1a1aa; line-height: 1.5; }
+  .delBtn { float: right; color: #52525b; background: none; border: none; font-size: 11px; padding: 2px 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="headerRow">
+    <div>
+      <div class="eyebrow">Nasdaq &middot; Milan Session</div>
+      <h1>Session Bias Log</h1>
+      <p class="sub">Asian/London range + 15:00 candle sweep, tracked case by case.</p>
+    </div>
+    <button class="resetBtn mono" onclick="clearAllEntries()">↻ Clear</button>
+  </div>
+
+  <div class="statsGrid" id="statsGrid"></div>
+  <div id="breakdowns"></div>
+
+  <div class="fieldLabel">Session case (London / Asian range)</div>
+  <div class="optRow" id="sessionCaseOptions"></div>
+  <div class="refTable" id="refTable"></div>
+
+  <div class="fieldLabel">1H / 4H confluence?</div>
+  <div class="optRow3">
+    <button class="optBtn3" data-f="htf" data-v="true" onclick="setLogField('htf', true)">Yes</button>
+    <button class="optBtn3" data-f="htf" data-v="false" onclick="setLogField('htf', false)">No</button>
+  </div>
+
+  <div class="fieldLabel">15:00 candle sweep</div>
+  <div class="optRow3">
+    <button class="optBtn3" data-f="sweep15" data-v="high" onclick="setLogField('sweep15', 'high')">High swept</button>
+    <button class="optBtn3" data-f="sweep15" data-v="low" onclick="setLogField('sweep15', 'low')">Low swept</button>
+    <button class="optBtn3" data-f="sweep15" data-v="none" onclick="setLogField('sweep15', 'none')">No sweep</button>
+  </div>
+
+  <div class="fieldLabel">MSS + FVG confirmed (opposite direction)?</div>
+  <div class="optRow3">
+    <button class="optBtn3" data-f="mss" data-v="true" onclick="setLogField('mss', true)">Yes</button>
+    <button class="optBtn3" data-f="mss" data-v="false" onclick="setLogField('mss', false)">No</button>
+  </div>
+
+  <div class="fieldLabel">Outcome</div>
+  <div class="optRow3">
+    <button class="optBtn3" data-f="outcome" data-v="win" onclick="setLogField('outcome', 'win')">Win</button>
+    <button class="optBtn3" data-f="outcome" data-v="loss" onclick="setLogField('outcome', 'loss')">Loss</button>
+    <button class="optBtn3" data-f="outcome" data-v="noTrade" onclick="setLogField('outcome', 'noTrade')">No trade</button>
+  </div>
+
+  <div class="fieldLabel">R multiple (optional)</div>
+  <input type="number" step="0.1" class="numInput" id="rInput" placeholder="e.g. 2 or -1" oninput="setLogField('r', this.value)" />
+
+  <button class="saveEntryBtn mono" id="saveEntryBtn" onclick="saveLogEntry()">Save today's entry</button>
+
+  <div class="fieldLabel" style="margin-top:28px;">Log history</div>
+  <div id="logHistory"></div>
+</div>
+
+<script>
+function todayKey() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+/* ============ BIAS LOG ============ */
+
+const SESSION_CASES = [
+  { key: "londonEngulfsAsia", label: "London engulfs Asia (full)", freq: "19.6%",
+    stats: [["NY high takes London high","72.3%"],["NY low takes London low","71.1%"],["NY engulfs overnight","44.1%"]],
+    read: "Two-way day — both extremes are likely to get swept." },
+  { key: "asiaEngulfsLondon", label: "Asia engulfs London (full)", freq: "5.4%",
+    stats: [["NY high takes Asia high","75.9%"],["NY low takes Asia low","65.5%"],["NY engulfs overnight","44.8%"]],
+    read: "Rare case — two-way day, smaller sample size." },
+  { key: "londonPartialUp", label: "London partial-engulfs UP", freq: "33.0%",
+    stats: [["NY high takes London high","81.5%"],["NY low takes London low","64.5%"],["NY low takes Asian low","53.2%"]],
+    read: "High sweep favored — best hunting ground for a bearish fade." },
+  { key: "londonPartialDown", label: "London partial-engulfs DOWN", freq: "24.8%",
+    stats: [["NY low takes London low","75.3%"],["NY high takes London high","68.8%"],["NY high takes Asian high","56.4%"]],
+    read: "Low sweep favored — best hunting ground for a bullish fade." },
+  { key: "neither", label: "Neither / unclear relationship", freq: "~17%",
+    stats: [],
+    read: "Not covered by the session dataset — fall back to your structure read." },
+];
+
+const LOG_KEY = "silverBulletBiasLog";
+let logEntries = [];
+try {
+  const raw = localStorage.getItem(LOG_KEY);
+  logEntries = raw ? JSON.parse(raw) : [];
+} catch(e) { logEntries = []; }
+
+let draftEntry = { sessionCase: null, htf: null, sweep15: null, mss: null, outcome: null, r: "" };
+
+function setLogField(field, value) {
+  draftEntry[field] = value;
+  renderBiasLog();
+}
+
+function clearAllEntries() {
+  if (!confirm("Clear all logged entries? This can't be undone.")) return;
+  logEntries = [];
+  try { localStorage.setItem(LOG_KEY, JSON.stringify(logEntries)); } catch(e) {}
+  draftEntry = { sessionCase: null, htf: null, sweep15: null, mss: null, outcome: null, r: "" };
+  renderBiasLog();
+}
+
+function renderBiasLog() {
+  renderStats();
+  renderSessionCaseOptions();
+  renderRefTable();
+  renderOptState();
+  renderLogHistory();
+  const btn = document.getElementById("saveEntryBtn");
+  btn.disabled = !(draftEntry.sessionCase && draftEntry.outcome);
+}
+
+function renderSessionCaseOptions() {
+  const el = document.getElementById("sessionCaseOptions");
+  el.innerHTML = SESSION_CASES.map(c => `
+    <button class="optBtn ${draftEntry.sessionCase === c.key ? "selected" : ""}" onclick="setLogField('sessionCase','${c.key}')">
+      ${c.label}<span class="freq mono">${c.freq}</span>
+    </button>
+  `).join("");
+}
+
+function renderRefTable() {
+  const el = document.getElementById("refTable");
+  const c = SESSION_CASES.find(c => c.key === draftEntry.sessionCase);
+  if (!c) { el.innerHTML = ""; return; }
+  el.innerHTML = (c.stats.length
+    ? c.stats.map(([label,val]) => `<div class="refRow"><span>${label}</span><b class="mono">${val}</b></div>`).join("")
+    : "") + `<div class="refNote">${c.read}</div>`;
+}
+
+function renderOptState() {
+  document.querySelectorAll(".optBtn3").forEach(b => {
+    const f = b.dataset.f;
+    let v = draftEntry[f];
+    const bv = b.dataset.v;
+    const match = (typeof v === "boolean") ? String(v) === bv : v === bv;
+    b.classList.toggle("selected", match);
+  });
+  const rInput = document.getElementById("rInput");
+  if (document.activeElement !== rInput) rInput.value = draftEntry.r || "";
+}
+
+function saveLogEntry() {
+  if (!draftEntry.sessionCase || !draftEntry.outcome) return;
+  const entry = Object.assign({ id: "log" + Date.now(), date: todayKey() }, draftEntry);
+  logEntries.unshift(entry);
+  try { localStorage.setItem(LOG_KEY, JSON.stringify(logEntries)); } catch(e) {}
+  draftEntry = { sessionCase: null, htf: null, sweep15: null, mss: null, outcome: null, r: "" };
+  renderBiasLog();
+}
+
+function deleteLogEntry(id) {
+  logEntries = logEntries.filter(e => e.id !== id);
+  try { localStorage.setItem(LOG_KEY, JSON.stringify(logEntries)); } catch(e) {}
+  renderBiasLog();
+}
+
+function renderStats() {
+  const el = document.getElementById("statsGrid");
+  const decided = logEntries.filter(e => e.outcome === "win" || e.outcome === "loss");
+  const wins = decided.filter(e => e.outcome === "win").length;
+  const winRate = decided.length ? Math.round((wins / decided.length) * 100) : 0;
+  el.innerHTML = `
+    <div class="statBox"><div class="num mono">${logEntries.length}</div><div class="lbl">Days logged</div></div>
+    <div class="statBox"><div class="num mono">${decided.length ? winRate + "%" : "—"}</div><div class="lbl">Win rate</div></div>
+    <div class="statBox"><div class="num mono">${logEntries.filter(e => e.outcome === "noTrade").length}</div><div class="lbl">No-trade days</div></div>
+  `;
+}
+
+function renderLogHistory() {
+  const el = document.getElementById("logHistory");
+  if (logEntries.length === 0) {
+    el.innerHTML = `<p class="sub">No entries yet. Log today's session once you've read the day.</p>`;
+    return;
+  }
+  el.innerHTML = logEntries.map(e => {
+    const c = SESSION_CASES.find(c => c.key === e.sessionCase);
+    const parts = [];
+    if (c) parts.push(c.label);
+    if (e.htf !== null && e.htf !== undefined) parts.push("HTF: " + (e.htf ? "yes" : "no"));
+    if (e.sweep15) parts.push("15:00 sweep: " + e.sweep15);
+    if (e.mss !== null && e.mss !== undefined) parts.push("MSS+FVG: " + (e.mss ? "yes" : "no"));
+    if (e.r) parts.push(e.r + "R");
+    return `<div class="logEntry">
+      <div class="row1">
+        <span class="date">${e.date}</span>
+        <span><span class="result ${e.outcome}">${e.outcome}</span><button class="delBtn" onclick="deleteLogEntry('${e.id}')">✕</button></span>
+      </div>
+      <div class="detail">${parts.join(" · ")}</div>
+    </div>`;
+  }).join("");
+}
+
+renderBiasLog();
+</script>
+</body>
+</html>
