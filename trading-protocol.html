@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<meta name="apple-mobile-web-app-title" content="Silver Bullet" />
+<title>Silver Bullet Protocol</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    background: #09090b;
+    color: #f4f4f5;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding-bottom: 60px;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 28px 18px 40px; }
+  .eyebrow { font-size: 11px; letter-spacing: .25em; text-transform: uppercase; color: #d4a24e; margin-bottom: 6px; }
+  h1 { font-size: 24px; font-weight: 650; letter-spacing: -0.01em; margin: 0 0 6px; }
+  .sub { font-size: 13px; color: #71717a; margin: 0; line-height: 1.4; }
+  .headerRow { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 26px; }
+  .resetBtn {
+    flex-shrink: 0; display: flex; align-items: center; gap: 6px;
+    font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+    color: #a1a1aa; background: transparent; border: 1px solid #27272a;
+    border-radius: 8px; padding: 9px 12px;
+  }
+  .resetBtn:active { border-color: #52525b; color: #f4f4f5; }
+  .topBtns { display: flex; gap: 6px; flex-shrink: 0; }
+
+  .timeline { display: flex; gap: 4px; margin-bottom: 22px; }
+  .tSeg { flex: 1; }
+  .tBar { height: 6px; border-radius: 99px; background: #27272a; margin-bottom: 6px; transition: background .25s; }
+  .tBar.clear { background: #10b981; }
+  .tBar.active { background: #d4a24e; }
+  .tBar.halted { background: #f43f5e; }
+  .tLabel { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: #52525b; display: none; }
+
+  .biasChip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+    color: #fbbf24; border: 1px solid #78350f; background: rgba(120,53,15,.25);
+    border-radius: 8px; padding: 7px 11px; margin-bottom: 18px;
+  }
+
+  .phaseHead { display: flex; align-items: baseline; gap: 8px; margin: 30px 0 10px; }
+  .phaseHead:first-of-type { margin-top: 0; }
+  .phaseHead h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .18em; color: #71717a; margin: 0; font-weight: 600; }
+  .phaseHead span { font-size: 10px; color: #3f3f46; }
+
+  .card { border: 1px solid #27272a; background: rgba(24,24,27,.6); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+  .cardTop { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .cardTitle { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #52525b; margin-bottom: 3px; }
+  .cardPrompt { font-size: 14px; color: #e4e4e7; line-height: 1.35; }
+
+  .btnRow { display: flex; gap: 6px; flex-shrink: 0; }
+  .yn {
+    width: 38px; height: 38px; border-radius: 8px; border: 1px solid #3f3f46;
+    background: transparent; color: #a1a1aa; display: flex; align-items: center; justify-content: center;
+  }
+  .yn.selected { background: #f4f4f5; border-color: #f4f4f5; color: #09090b; }
+
+  .choiceRow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .choiceBtn {
+    font-size: 12px; font-family: ui-monospace, monospace; padding: 8px 11px;
+    border-radius: 7px; border: 1px solid #3f3f46; background: transparent; color: #a1a1aa;
+  }
+  .choiceBtn.selected { background: #f4f4f5; border-color: #f4f4f5; color: #09090b; }
+
+  .outcome {
+    margin-top: 12px; display: flex; align-items: flex-start; gap: 8px;
+    font-size: 12px; border-radius: 8px; padding: 9px 11px; border: 1px solid; line-height: 1.35;
+  }
+  .outcome.go { border-color: #065f46; background: rgba(6,95,70,.25); color: #34d399; }
+  .outcome.wait { border-color: #78350f; background: rgba(120,53,15,.25); color: #fbbf24; }
+  .outcome.stop { border-color: #881337; background: rgba(136,19,55,.25); color: #fb7185; }
+
+  .banner { margin-top: 30px; border-radius: 12px; padding: 18px; display: flex; gap: 12px; align-items: flex-start; }
+  .banner.stop { border: 1px solid #881337; background: rgba(136,19,55,.3); }
+  .banner.done { border: 1px solid #065f46; background: rgba(6,95,70,.3); }
+  .banner h3 { margin: 0 0 4px; font-size: 14px; font-weight: 650; }
+  .banner.stop h3 { color: #fda4af; }
+  .banner.done h3 { color: #6ee7b7; }
+  .banner p { margin: 0; font-size: 12px; color: #d4d4d8; }
+  .banner .sub2 { color: #71717a; margin-top: 6px; }
+
+  .legend { margin-top: 34px; display: flex; align-items: center; gap: 14px; font-size: 10px; color: #52525b; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+
+  svg { display: block; }
+
+  /* tabs */
+  .topTabs { display: flex; gap: 6px; margin-bottom: 22px; }
+  .topTabBtn { flex: 1; text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+    padding: 10px 6px; border-radius: 8px; border: 1px solid #27272a; color: #a1a1aa; background: transparent; }
+  .topTabBtn.active { background: #f4f4f5; color: #09090b; border-color: #f4f4f5; }
+  .tabView { display: none; }
+  .tabView.active { display: block; }
+
+  /* bias log form */
+  .fieldLabel { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #71717a; margin: 16px 0 8px; }
+  .lieDetector { color: #d4a24e; font-weight: 600; margin-left: 6px; letter-spacing: 0; text-transform: none; }
+  .tfHint { font-size: 11px; color: #71717a; margin-top: 6px; }
+  .tfHint b { color: #d4d4d8; }
+  .fieldLabel:first-child { margin-top: 0; }
+  .optRow { display: flex; flex-direction: column; gap: 6px; }
+  .optBtn { text-align: left; padding: 10px 12px; border-radius: 8px; border: 1px solid #27272a; background: rgba(24,24,27,.6); color: #d4d4d8; font-size: 13px; }
+  .optBtn .freq { float: right; color: #52525b; font-size: 11px; }
+  .optBtn.selected { border-color: #d4a24e; background: rgba(120,53,15,.2); color: #f4f4f5; }
+  .optBtn3 { flex: 1; text-align: center; padding: 10px 6px; border-radius: 8px; border: 1px solid #27272a; background: rgba(24,24,27,.6); color: #d4d4d8; font-size: 12px; }
+  .optBtn3.selected { border-color: #d4a24e; background: rgba(120,53,15,.2); color: #f4f4f5; }
+  .optRow3 { display: flex; gap: 6px; }
+  .refTable { margin-top: 10px; border: 1px solid #27272a; border-radius: 8px; padding: 10px 12px; background: rgba(24,24,27,.4); }
+  .refRow { display: flex; justify-content: space-between; font-size: 12px; color: #a1a1aa; padding: 3px 0; }
+  .refRow b { color: #d4a24e; font-weight: 600; }
+  .refNote { font-size: 11px; color: #71717a; margin-top: 6px; line-height: 1.4; }
+  .numInput {
+    width: 100%; background: rgba(24,24,27,.6); border: 1px solid #27272a; color: #f4f4f5;
+    padding: 10px 12px; border-radius: 8px; font-size: 14px; font-family: inherit;
+  }
+  .saveEntryBtn {
+    width: 100%; margin-top: 18px; padding: 12px; border-radius: 8px; border: none;
+    background: #f4f4f5; color: #09090b; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+  }
+  .saveEntryBtn:disabled { opacity: .4; }
+
+  .statsGrid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 22px; }
+  .statBox { border: 1px solid #27272a; border-radius: 8px; padding: 10px; text-align: center; }
+  .statBox .num { font-size: 20px; font-weight: 650; color: #f4f4f5; }
+  .statBox .lbl { font-size: 9px; text-transform: uppercase; color: #71717a; margin-top: 2px; letter-spacing: .04em; }
+
+  .breakdownRow { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #1c1c1f; font-size: 12px; }
+  .breakdownRow .name { color: #d4d4d8; }
+  .breakdownRow .val { color: #d4a24e; font-family: ui-monospace, monospace; }
+
+  .logEntry { border: 1px solid #27272a; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; font-size: 12px; }
+  .logEntry .row1 { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .logEntry .date { color: #71717a; font-family: ui-monospace, monospace; }
+  .logEntry .result { text-transform: uppercase; font-size: 10px; font-weight: 650; letter-spacing: .04em; }
+  .logEntry .result.win { color: #34d399; }
+  .logEntry .result.loss { color: #fb7185; }
+  .logEntry .result.noTrade { color: #71717a; }
+  .logEntry .detail { color: #a1a1aa; line-height: 1.5; }
+  .delBtn { float: right; color: #52525b; background: none; border: none; font-size: 11px; padding: 2px 6px; }
+
+  /* journal fields */
+  .textInput {
+    width: 100%; background: rgba(24,24,27,.6); border: 1px solid #27272a; color: #f4f4f5;
+    padding: 10px 12px; border-radius: 8px; font-size: 14px; font-family: inherit;
+  }
+  .textArea {
+    width: 100%; background: rgba(24,24,27,.6); border: 1px solid #27272a; color: #f4f4f5;
+    padding: 10px 12px; border-radius: 8px; font-size: 14px; font-family: inherit; min-height: 64px; resize: vertical;
+  }
+  .formOverlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 650;
+    display: none; align-items: flex-end; justify-content: center; padding: 0;
+  }
+  .formOverlay.open { display: flex; }
+  .formSheet {
+    background: #0f0f10; border-top: 1px solid #27272a; width: 100%; max-width: 640px;
+    padding: 20px 18px 26px; max-height: 85vh; overflow-y: auto; border-radius: 16px 16px 0 0;
+  }
+  .fieldHalf { display: flex; gap: 8px; }
+  .fieldHalf > div { flex: 1; }
+  .pairRow { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pairBtn { padding: 8px 12px; border-radius: 8px; border: 1px solid #27272a; background: rgba(24,24,27,.6); color: #d4d4d8; font-size: 12px; font-family: ui-monospace, monospace; }
+  .pairBtn.selected { border-color: #d4a24e; background: rgba(120,53,15,.2); color: #f4f4f5; }
+  .importedTag { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: #52525b; border: 1px solid #27272a; border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
+  .logEntry .journalNote { color: #71717a; font-style: italic; margin-top: 4px; }
+  .logEntry .pnlTag { font-family: ui-monospace, monospace; }
+  .logEntry .pnlTag.pos { color: #34d399; }
+  .logEntry .pnlTag.neg { color: #fb7185; }
+
+  /* top tabs */
+  .topTabs { display: flex; gap: 6px; margin-bottom: 22px; }
+  .topTabBtn { flex: 1; text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+    padding: 10px 6px; border-radius: 8px; border: 1px solid #27272a; color: #a1a1aa; background: transparent; }
+  .topTabBtn.active { background: #f4f4f5; color: #09090b; border-color: #f4f4f5; }
+  .tabView { display: none; }
+  .tabView.active { display: block; }
+
+  /* journal */
+  .jFilterRow { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  .jFilterBtn { font-size: 11px; padding: 7px 11px; border-radius: 8px; border: 1px solid #27272a; color: #a1a1aa; background: transparent; }
+  .jFilterBtn.active { background: #d4a24e; color: #09090b; border-color: #d4a24e; }
+  .jCard { border: 1px solid #27272a; border-radius: 10px; padding: 12px 14px; margin-bottom: 9px; background: rgba(24,24,27,.5); }
+  .jTop { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+  .jPair { font-family: ui-monospace, monospace; font-size: 12px; color: #d4a24e; font-weight: 600; }
+  .jDate { font-size: 11px; color: #71717a; margin-left: 6px; }
+  .jTime { font-size: 10px; color: #52525b; font-family: ui-monospace, monospace; }
+  .jPnl { font-family: ui-monospace, monospace; font-size: 14px; font-weight: 650; }
+  .jPnl.pos { color: #34d399; }
+  .jPnl.neg { color: #fb7185; }
+  .jPnl.zero { color: #a1a1aa; }
+  .jRR { font-size: 10px; color: #71717a; margin-top: 2px; text-align: right; }
+  .jReason { font-size: 13px; color: #d4d4d8; line-height: 1.4; margin-bottom: 4px; }
+  .jTags { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0; }
+  .jTagChip { font-size: 10px; text-transform: uppercase; letter-spacing: .03em; color: #d4a24e; border: 1px solid #3f2f18; background: rgba(120,53,15,.15); border-radius: 5px; padding: 2px 7px; }
+  .jImprove { font-size: 12px; color: #a1a1aa; line-height: 1.4; border-left: 2px solid #78350f; padding-left: 8px; }
+  .jSfp { display: inline-block; font-size: 9px; text-transform: uppercase; letter-spacing: .04em; padding: 2px 6px; border-radius: 4px; margin-top: 6px; }
+  .jSfp.y { background: rgba(16,185,129,.15); color: #34d399; }
+  .jSfp.n { background: rgba(244,63,94,.15); color: #fb7185; }
+  .jStatsGrid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 18px; }
+  .field2 { display: flex; gap: 8px; }
+  .field2 > div { flex: 1; }
+  .field label { display: block; font-size: 11px; color: #71717a; margin-bottom: 5px; text-transform: uppercase; letter-spacing: .04em; }
+  .field { margin-bottom: 12px; }
+  .field input, .field textarea, .field select {
+    width: 100%; background: rgba(24,24,27,.6); border: 1px solid #27272a; color: #f4f4f5;
+    padding: 10px 12px; border-radius: 8px; font-size: 14px; font-family: inherit; box-sizing: border-box;
+  }
+  .field textarea { min-height: 60px; resize: vertical; }
+  .jToggleRow { display: flex; gap: 6px; }
+  .jToggleRow button { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #27272a; background: transparent; color: #a1a1aa; font-size: 12px; }
+  .jToggleRow button.selected { border-color: #d4a24e; background: rgba(120,53,15,.2); color: #f4f4f5; }
+
+  /* photo attach */
+  .photoBtn {
+    width: 100%; background: rgba(24,24,27,.6); border: 1px dashed #3f3f46; color: #a1a1aa;
+    padding: 10px; border-radius: 8px; font-size: 13px; text-align: center;
+  }
+  .photoBtn:active { border-color: #d4a24e; color: #f4f4f5; }
+  .photoPreviewWrap { position: relative; margin-top: 8px; }
+  .photoPreviewWrap img { width: 100%; border-radius: 8px; border: 1px solid #27272a; display: block; }
+  .photoRemoveBtn {
+    position: absolute; top: 6px; right: 6px; background: rgba(9,9,11,.85); border: 1px solid #3f3f46;
+    color: #f4f4f5; border-radius: 6px; font-size: 12px; padding: 3px 8px;
+  }
+  .jThumb {
+    width: 100%; max-height: 160px; object-fit: cover; border-radius: 8px; border: 1px solid #27272a;
+    margin-top: 8px; display: block; cursor: pointer;
+  }
+  .jThumbWrap { position: relative; }
+  .jThumbSkeleton { width: 100%; height: 80px; border-radius: 8px; background: #18181b; margin-top: 8px; }
+
+  .lightbox {
+    position: fixed; inset: 0; background: rgba(0,0,0,.92); z-index: 700;
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  .lightbox.open { display: flex; }
+  .lightbox img { max-width: 100%; max-height: 100%; border-radius: 6px; }
+  .lightboxClose {
+    position: absolute; top: 16px; right: 16px; background: rgba(24,24,27,.8); border: 1px solid #3f3f46;
+    color: #f4f4f5; border-radius: 8px; width: 36px; height: 36px; font-size: 16px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="headerRow">
+    <div>
+      <div class="eyebrow">Asian Sweep &middot; London Session</div>
+      <h1>Trading Journal</h1>
+      <p class="sub">NAS100 &middot; EURUSD &mdash; manual, 8:00&ndash;11:00 Milan.</p>
+    </div>
+    <div class="topBtns">
+      <button class="resetBtn mono" onclick="openExportModal()">Save</button>
+      <button class="resetBtn mono" onclick="openImportModal()">Load</button>
+      <button class="resetBtn mono" id="clearBtn" onclick="clearAllEntries()">↻ Clear</button>
+    </div>
+  </div>
+
+  <div class="tabView active" id="view-journal">
+    <div class="jStatsGrid" id="jStatsGrid"></div>
+
+    <div class="fieldLabel">New trade</div>
+    <div class="field2">
+      <div class="field">
+        <label>Pair</label>
+        <div class="pairRow" id="jPairRow">
+          <button type="button" class="pairBtn selected" data-pair="NAS100" onclick="setPair('NAS100')">NAS100</button>
+          <button type="button" class="pairBtn" data-pair="EURUSD" onclick="setPair('EURUSD')">EURUSD</button>
+        </div>
+        <div class="tfHint" id="tfHint">Entry timeframe: <b>15m</b></div>
+        <input type="hidden" id="jPair" value="NAS100" />
+      </div>
+      <div class="field">
+        <label>Date</label>
+        <input type="date" id="jDate" />
+      </div>
+    </div>
+
+    <div class="fieldLabel">Daily bias (TTrades logic)</div>
+    <div class="optRow3">
+      <button class="optBtn3" data-f="bias" data-v="bullish" onclick="setBias('bullish')">Bullish</button>
+      <button class="optBtn3" data-f="bias" data-v="bearish" onclick="setBias('bearish')">Bearish</button>
+      <button class="optBtn3" data-f="bias" data-v="neutral" onclick="setBias('neutral')">Neutral</button>
+    </div>
+
+    <div class="fieldLabel">SMT confirmed? <span class="lieDetector">🔍 Lie Detector</span></div>
+    <div class="optRow3">
+      <button class="optBtn3" data-f="smt" data-v="yes" onclick="setSmt('yes')">Yes</button>
+      <button class="optBtn3" data-f="smt" data-v="no" onclick="setSmt('no')">No</button>
+      <button class="optBtn3" data-f="smt" data-v="na" onclick="setSmt('na')">N/A</button>
+    </div>
+
+    <div class="fieldLabel">SL anchor used</div>
+    <div class="optRow3">
+      <button class="optBtn3" data-f="slAnchor" data-v="c2" onclick="setSlAnchor('c2')">Candle 2 (standard)</button>
+      <button class="optBtn3" data-f="slAnchor" data-v="c1" onclick="setSlAnchor('c1')">Candle 1 (abnormal vol.)</button>
+    </div>
+
+    <div class="field2">
+      <div class="field">
+        <label>Entry time</label>
+        <input type="time" id="jEntryTime" />
+      </div>
+      <div class="field">
+        <label>Exit time</label>
+        <input type="time" id="jExitTime" />
+      </div>
+    </div>
+    <div class="field2">
+      <div class="field">
+        <label>PNL ($)</label>
+        <input type="number" step="0.01" id="jPnl" placeholder="e.g. 250 or -120" />
+      </div>
+      <div class="field">
+        <label>RR</label>
+        <input type="number" step="0.01" id="jRR" placeholder="e.g. 1.7 or -0.5" />
+      </div>
+    </div>
+    <div class="field">
+      <label>Reason (setup)</label>
+      <textarea id="jReason" placeholder="Entered 5mn fvg using daily bias..."></textarea>
+    </div>
+    <div class="field">
+      <label>Improve (lesson)</label>
+      <textarea id="jImprove" placeholder="What would you do differently..."></textarea>
+    </div>
+    <div class="field">
+      <label>Waited for 1H SFP?</label>
+      <div class="jToggleRow">
+        <button id="jSfpY" onclick="setSfp('Y')">Yes</button>
+        <button id="jSfpN" onclick="setSfp('N')">No</button>
+        <button id="jSfpNone" onclick="setSfp(null)">N/A</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Chart screenshot (optional)</label>
+      <input type="file" accept="image/*" id="jPhotoInput" onchange="handlePhotoSelect(event)" style="display:none;" />
+      <button type="button" class="photoBtn" id="jPhotoBtn" onclick="document.getElementById('jPhotoInput').click()">+ Add photo</button>
+      <div class="photoPreviewWrap" id="jPhotoPreviewWrap" style="display:none;">
+        <img id="jPhotoPreview" />
+        <button type="button" class="photoRemoveBtn" onclick="removeDraftPhoto()">Remove</button>
+      </div>
+    </div>
+    <button class="saveEntryBtn mono" onclick="saveJournalEntry()">Save trade</button>
+
+    <div class="fieldLabel" style="margin-top:28px;">History (<span id="jCount">0</span>)</div>
+    <div class="jFilterRow" id="jFilterRow"></div>
+    <div id="journalList"></div>
+  </div>
+</div>
+
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <button class="lightboxClose" onclick="closeLightbox()">✕</button>
+  <img id="lightboxImg" src="" onclick="event.stopPropagation()" />
+</div>
+
+<div class="formOverlay" id="exportOverlay">
+  <div class="formSheet">
+    <h3 class="mono" style="font-size:13px;color:#d4a24e;margin-bottom:12px;">Save / Export</h3>
+    <p class="sub" style="margin-bottom:10px;">Copy this and store it somewhere safe (Notes app, email to yourself). Includes your Bias Log, your full Journal, and any trade photos. Paste it back in Load to restore.</p>
+    <textarea id="exportText" class="textArea" style="min-height:160px;font-family:ui-monospace,monospace;font-size:11px;" readonly onclick="this.select()"></textarea>
+    <div class="formActions" style="display:flex;gap:8px;margin-top:12px;">
+      <button class="resetBtn mono" style="flex:1;" onclick="closeExportModal()">Close</button>
+      <button class="saveEntryBtn mono" style="flex:1;margin-top:0;" onclick="copyExport()">Copy</button>
+    </div>
+  </div>
+</div>
+
+<div class="formOverlay" id="importOverlay">
+  <div class="formSheet">
+    <h3 class="mono" style="font-size:13px;color:#d4a24e;margin-bottom:12px;">Load / Import</h3>
+    <p class="sub" style="margin-bottom:10px;">Paste a previously saved code below. This replaces your current Bias Log and Journal entirely.</p>
+    <textarea id="importText" class="textArea" style="min-height:160px;font-family:ui-monospace,monospace;font-size:11px;" placeholder="Paste your save code here"></textarea>
+    <div class="formActions" style="display:flex;gap:8px;margin-top:12px;">
+      <button class="resetBtn mono" style="flex:1;" onclick="closeImportModal()">Cancel</button>
+      <button class="saveEntryBtn mono" style="flex:1;margin-top:0;" onclick="doImport()">Restore</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function todayKey() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+/* ============ BIAS LOG ============ */
+
+// Kept empty for backward-compatibility with the Save/Load export format --
+// the Bias Log itself (session cases, HTF confluence, etc.) has been retired
+// now that both pairs are tracked manually through one unified Journal.
+let logEntries = [];
+
+function clearAllEntries() {
+  clearJournal();
+}
+
+/* ============ JOURNAL FIELD TRACKERS (Daily Bias / SMT / SL Anchor) ============ */
+
+let draftBias = null;
+let draftSmt = null;
+let draftSlAnchor = null;
+
+function setBias(v) {
+  draftBias = v;
+  document.querySelectorAll('[data-f="bias"]').forEach(b => b.classList.toggle("selected", b.dataset.v === v));
+}
+function setSmt(v) {
+  draftSmt = v;
+  document.querySelectorAll('[data-f="smt"]').forEach(b => b.classList.toggle("selected", b.dataset.v === v));
+}
+function setSlAnchor(v) {
+  draftSlAnchor = v;
+  document.querySelectorAll('[data-f="slAnchor"]').forEach(b => b.classList.toggle("selected", b.dataset.v === v));
+}
+function resetFieldTrackers() {
+  draftBias = null; draftSmt = null; draftSlAnchor = null;
+  document.querySelectorAll('[data-f="bias"], [data-f="smt"], [data-f="slAnchor"]').forEach(b => b.classList.remove("selected"));
+}
+
+/* ============ JOURNAL ============ */
+
+const LEGACY_JOURNAL = [{"pair": "XAUUSD", "date": "2026-01-06", "entryTime": "18:39", "exitTime": "17:40", "pnl": -501.93, "rr": -0.5, "reason": "Entered from bullish 4hr fvg (not good) stick to your plan", "improve": "Don\u2019t trade tuesday and pick a crucial MSS + fvg", "sfp": null}, {"pair": "EURUSD", "date": "2026-01-07", "entryTime": "17:40", "exitTime": "17:43", "pnl": -772.65, "rr": -0.7, "reason": "EURUSD", "improve": "Select Strong Mss and stick to your two pairs", "sfp": null}, {"pair": "XAUUSD", "date": "2026-01-08", "entryTime": "17:43", "exitTime": "17:51", "pnl": 494.76, "rr": 0.5, "reason": "Entered 5mn fvg using Daily biais", "improve": "Well executed could hold longerWell executed could hold longer(JEUDI)", "sfp": null}, {"pair": "XAUUSD", "date": "2026-01-09", "entryTime": "17:51", "exitTime": "20:36", "pnl": -504.9, "rr": -0.5, "reason": "Entered from bullish 4hr fvg (not good)", "improve": "Had the wrong biais and entered without MSS + no trade friday", "sfp": null}, {"pair": "NAS100", "date": "2026-01-22", "entryTime": "17:24", "exitTime": "18:00", "pnl": -250.62, "rr": -0.25, "reason": "Dumbest trade + entered too early(JEUDI)", "improve": "Be more nmindful price was too over-extended you BOUGHT in a PREMIUM zone", "sfp": null}, {"pair": "EURUSD", "date": "2026-01-20", "entryTime": "18:38", "exitTime": "17:24", "pnl": -258.96, "rr": -0.25, "reason": "Entered 5mn fvg using Daily biais", "improve": "Could have avoided loss if i waited for major MSS in the 5mn", "sfp": null}, {"pair": "XAUUSD", "date": "2026-01-22", "entryTime": "18:00", "exitTime": "2:05", "pnl": 1334.24, "rr": 1.3, "reason": "XAUUSD", "improve": "Well done HTF fvg + MSS + 5mn fvg (JEUDI)", "sfp": null}, {"pair": "NAS100", "date": "2026-01-27", "entryTime": "18:52", "exitTime": "20:11", "pnl": 151.84, "rr": 0.15, "reason": "Rentered same position", "improve": "look above", "sfp": null}, {"pair": "XAUUSD", "date": "2026-01-26", "entryTime": "18:41", "exitTime": "18:52", "pnl": 13.92, "rr": null, "reason": "XAUUSD", "improve": "Didn\u2019t even wait for MSS and no trade Monday", "sfp": null}, {"pair": "XAUUSD", "date": "2026-01-28", "entryTime": "17:50", "exitTime": "17:55", "pnl": -513.74, "rr": -0.5, "reason": "XAUUSD", "improve": "Entered too early (remember best hour 16h-17h) + choose only strong MSS+fvg must coincide", "sfp": null}, {"pair": "XAUUSD", "date": "2026-01-30", "entryTime": "17:55", "exitTime": "19:06", "pnl": -473.44, "rr": -0.5, "reason": "Entered 5mn fvg using Daily biais", "improve": "Should only select strong MSS , don\u2019t trade friday", "sfp": null}, {"pair": "NAS100", "date": "2026-02-09", "entryTime": "17:52", "exitTime": "17:30", "pnl": 1777.93, "rr": 1.7, "reason": "Entered 5mn fvg using Daily biais", "improve": "Normally shouldn\u2019t trade monday but perfect execution ( 1hr failure swing + strong MSS+fvg)", "sfp": null}, {"pair": "XAUUSD", "date": "2026-02-02", "entryTime": "19:06", "exitTime": "17:52", "pnl": -488.04, "rr": -0.5, "reason": "XAUUSD", "improve": "Shouldn\u2019t trade monday and price ran both side of session so shoulld avoid", "sfp": null}, {"pair": "XAUUSD", "date": "2026-02-10", "entryTime": "17:45", "exitTime": "17:57", "pnl": -502.09, "rr": -0.5, "reason": "XAUUSD", "improve": "Never trade on tuesday and ther was no session raid (barely)", "sfp": null}, {"pair": "NAS100", "date": "2026-02-10", "entryTime": "17:30", "exitTime": "17:45", "pnl": -514.62, "rr": -0.5, "reason": "NAS100", "improve": "Again there was no major MSS +FVG and stick to 5mn entry", "sfp": null}, {"pair": "NAS100", "date": "2026-02-11", "entryTime": "17:57", "exitTime": "19:06", "pnl": -509.41, "rr": -0.5, "reason": "Entered 5mn fvg using Daily biais", "improve": "Should pay attention to 4H fvg HTF", "sfp": null}, {"pair": "NAS100", "date": "2026-02-13", "entryTime": "17:45", "exitTime": "17:45", "pnl": -500.83, "rr": -0.5, "reason": "Entered 5mn fvg using Daily biais", "improve": "Shouldn\u2019t trade friday and there was no 5 mn MSS+fvg", "sfp": null}, {"pair": "XAUUSD", "date": "2026-02-19", "entryTime": "15:44", "exitTime": "15:49", "pnl": -239.0, "rr": -0.23, "reason": "Entered 5mn fvg using Daily biais", "improve": "Wrong direction", "sfp": null}, {"pair": "NAS100", "date": "2026-02-17", "entryTime": "17:08", "exitTime": "19:39", "pnl": -250.0, "rr": -0.25, "reason": "Entered 5mn fvg using Daily biais", "improve": "Shouldn\u2019t trade tueasday when daily bias is not clear", "sfp": null}, {"pair": "XAUUSD", "date": "2026-02-25", "entryTime": "15:51", "exitTime": "16:04", "pnl": -118.0, "rr": -0.11, "reason": "Entered 5mn fvg without context", "improve": "Coul avoid a loss if i waited for 1hr failure swing", "sfp": null}, {"pair": "XAUUSD", "date": "2026-02-26", "entryTime": "15:31", "exitTime": "15:34", "pnl": 204.0, "rr": 0.2, "reason": "Entered off previous day LVN on the 15 min", "improve": "This strategy has high potential but avoid switching mid challenge", "sfp": null}, {"pair": "XAUUSD", "date": "2026-02-27", "entryTime": "14:07", "exitTime": "14:15", "pnl": -122.0, "rr": -0.12, "reason": "Entered off previous day LVN on the 15 min", "improve": "Didn\u2019t place LVN carefully could have been a win", "sfp": null}, {"pair": "NAS100", "date": "2026-03-03", "entryTime": "8:26", "exitTime": "9:28", "pnl": -126.0, "rr": -0.12, "reason": "Entered off previous day LVN on the 15 min", "improve": "Traded blindly off previous day LVN", "sfp": null}, {"pair": "XAUUSD", "date": "2026-03-04", "entryTime": "16:39", "exitTime": "16:44", "pnl": -119.0, "rr": -0.11, "reason": "Entered off 5min fvg", "improve": "Could have avoided loss if i waited 1hr failure swing to confirm", "sfp": null}, {"pair": "NAS100", "date": "2026-03-05", "entryTime": "15:45", "exitTime": "15:57", "pnl": 244.0, "rr": 0.24, "reason": "5mn fvg+MSS entry according to daily biais and oposite previous session raid and 1hr failure swing", "improve": "Well executed", "sfp": null}, {"pair": "XAUUSD", "date": "2026-03-06", "entryTime": "15:50", "exitTime": "15:55", "pnl": -120.0, "rr": -0.12, "reason": "Entered 5mn fvg using Daily biais", "improve": "Didn\u2019t wait for MSS to confirm entry", "sfp": null}, {"pair": "NAS100", "date": "2026-03-12", "entryTime": "1:30", "exitTime": "5:38", "pnl": -127.0, "rr": -0.12, "reason": "Entry into LVN of volume profile", "improve": "Jumping around with strategies not good", "sfp": null}, {"pair": "NAS100", "date": "2026-03-13", "entryTime": "13:28", "exitTime": "13:30", "pnl": -152.0, "rr": -0.15, "reason": "5mn fvg+order block according to 15mn structure", "improve": "Should have checked the news Stick to your strat and one pair:XAUUSD", "sfp": null}, {"pair": "EURUSD", "date": "2026-03-19", "entryTime": "15:41", "exitTime": "15:50", "pnl": -129.0, "rr": -0.13, "reason": "5mn fvg+order block according to 15mn structure", "improve": "Trust your tradaing History and data analysis and stick to nas100", "sfp": null}, {"pair": "XAUUSD", "date": "2026-03-25", "entryTime": "15:12", "exitTime": "16:00", "pnl": -116.0, "rr": -0.11, "reason": "Entered on 5mn fvg + daily biais", "improve": "Entered during consolidation", "sfp": null}, {"pair": "NAS100", "date": "2026-03-26", "entryTime": "15:59", "exitTime": "16:53", "pnl": -50.0, "rr": 0.05, "reason": "Entered on 5mn fvg + daily biais+ MSS", "improve": "Followed plan cant win them all", "sfp": null}, {"pair": "NAS100", "date": "2026-03-30", "entryTime": "17:05", "exitTime": "17:14", "pnl": 99.0, "rr": 0.1, "reason": "Entered on 5mn fvg + daily biais+ MSS", "improve": "Good execution", "sfp": null}, {"pair": "NAS100", "date": "2026-03-31", "entryTime": "17:02", "exitTime": "17:06", "pnl": -52.0, "rr": -0.05, "reason": "Entered on 5mn fvg", "improve": "Didn\u2019t wait dor a 5mn MSS confirmation", "sfp": null}, {"pair": "NAS100", "date": "2026-04-01", "entryTime": "9:00", "exitTime": "9:00", "pnl": -50.0, "rr": -0.05, "reason": "Entered on 5mn fvg", "improve": "Follow your instinct the first fvg was correct", "sfp": null}, {"pair": "NAS100", "date": "2026-04-17", "entryTime": "15:30", "exitTime": "16:30", "pnl": 100.0, "rr": 0.1, "reason": "Entered on 5mn fvg after 1hr failure swing", "improve": "Never trade if there\u2019s no 1hr failure swing", "sfp": null}, {"pair": "NAS100", "date": "2026-04-20", "entryTime": "15:00", "exitTime": "15:32", "pnl": 0.0, "rr": 0.0, "reason": "Entered on 5mn fvg after 1hr failure swing", "improve": "Could have been a win if you stick to 1:2 RRR don\u2019t let greed deviate your plan", "sfp": null}, {"pair": "NAS100", "date": "2026-04-23", "entryTime": "15:14", "exitTime": "15:14", "pnl": -36.0, "rr": -0.036, "reason": "Entered on 5mn fvg", "improve": "Don\u2019t chase fvg and dont go break even nas has a habit of hitting entry fvg multiple times you could capitalize on that", "sfp": null}, {"pair": "NAS100", "date": "2026-04-30", "entryTime": "15:30", "exitTime": "15:30", "pnl": -50.0, "rr": -0.05, "reason": "Entered on 5mn fvg", "improve": "Hard Rule: No 1hr FAILURE SWING NO TRADE coul have been a win", "sfp": null}, {"pair": "NAS100", "date": "2026-05-04", "entryTime": "15:00", "exitTime": "15:00", "pnl": -50.0, "rr": -0.05, "reason": "Entered on 5mn fvg", "improve": "Again wait for 1hr swing failure and if you want to hold trade don\u2019t go breakeven until a long time", "sfp": null}, {"pair": "NAS100", "date": "2026-05-11", "entryTime": "22:11", "exitTime": "22:18", "pnl": -50.0, "rr": -0.05, "reason": "Entered on 5mn fvg", "improve": "Didn\u2019t respect daily biais nor 15mn structure", "sfp": null}, {"pair": "NAS100", "date": "2026-05-12", "entryTime": "15:30", "exitTime": "15:45", "pnl": 100.0, "rr": 0.1, "reason": "Entered on 5mn fvg", "improve": "Didn\u2019t respect daily biais nor 15mn structure won by chance", "sfp": null}, {"pair": "NAS100", "date": "2026-05-15", "entryTime": "15:37", "exitTime": "15:45", "pnl": -50.0, "rr": -0.05, "reason": "Entered on 5mn fvg", "improve": "Didn\u2019t respect daily biais nor 15mn structure AND didn\u2019t wait for swong failure", "sfp": null}, {"pair": "NAS100", "date": "2026-05-18", "entryTime": "15:56", "exitTime": "16:15", "pnl": 0.0, "rr": 0.0, "reason": "Entered on 5mn fvg after 1hr swing failure", "improve": "Went break even too soon otherwise perefect analysis and waited for 1hr swing failure candle to close", "sfp": null}, {"pair": "NAS100", "date": "2026-05-19", "entryTime": "19:04", "exitTime": "19:36", "pnl": null, "rr": 0.0, "reason": "Entered on 5mn fvg", "improve": "Didn\u2019t wait for session raids nor 1h failure swing", "sfp": null}, {"pair": "NAS100", "date": "2026-05-20", "entryTime": "17:23", "exitTime": "17:30", "pnl": null, "rr": 0.0, "reason": "Entered on 5mn fvg", "improve": "Sold in a 15mn bullish market structure", "sfp": null}, {"pair": "NAS100", "date": "2026-05-22", "entryTime": "18:06", "exitTime": "18:21", "pnl": null, "rr": 0.0, "reason": "Entered on 5mn fvg after 1hr swing", "improve": "Could have been a win if you gave the trade more room and good SL placement", "sfp": null}, {"pair": "NAS100", "date": "2026-05-25", "entryTime": "17:34", "exitTime": "11:53", "pnl": null, "rr": 0.2, "reason": "Entered on 5mn fvg  after 1hr swing", "improve": "Sold in a bullish market hoping  weekend gap woul be filled to avoid doing", "sfp": null}, {"pair": "NAS100", "date": "2026-05-26", "entryTime": "11:46", "exitTime": "12:28", "pnl": null, "rr": -0.05, "reason": "Entered on 5mn fvg  after 1hr swing", "improve": "Sold in a bullish 15mn structure and outside equity open (trade what you see not what you hope for)", "sfp": null}, {"pair": "NAS100", "date": "2026-05-28", "entryTime": "17:00", "exitTime": "17:12", "pnl": null, "rr": -0.05, "reason": "Entered on 5mn fvg  after 1hr swing", "improve": "Sold in an overall bullish market", "sfp": null}, {"pair": "NAS100", "date": "2026-05-29", "entryTime": "16:37", "exitTime": "0:45", "pnl": null, "rr": -0.05, "reason": "Entry was not thought out", "improve": "Tried to sell again don\u2019t get married to an idea", "sfp": null}, {"pair": "NAS100", "date": "2026-06-01", "entryTime": "18:17", "exitTime": "18:55", "pnl": null, "rr": 0.1, "reason": "Followed entry plan Entered on 5mn fvg  after 1hr swing", "improve": "Entry after 1hr failure swing well done", "sfp": null}, {"pair": "NAS100", "date": "2026-06-03", "entryTime": "16:25", "exitTime": "17:45", "pnl": null, "rr": -0.05, "reason": "Entered on 5mn fvg", "improve": "Didn\u2019t respect 15mn market structure shift", "sfp": null}, {"pair": "NAS100", "date": "2026-06-04", "entryTime": "17:17", "exitTime": "19:51", "pnl": null, "rr": -0.05, "reason": "Entered on 5mn fvg", "improve": "Was right on gap being filled but got taken out", "sfp": null}, {"pair": "NAS100", "date": "2026-06-08", "entryTime": "16:11", "exitTime": "16:35", "pnl": null, "rr": -0.05, "reason": "Entered on 5mn fvg", "improve": "No 1hr failure swing no trade", "sfp": null}, {"pair": "NAS100", "date": "2026-06-11", "entryTime": "16:16", "exitTime": "16:56", "pnl": null, "rr": -0.05, "reason": "Entered on 5mn fvg  after 1hr f swing", "improve": "Ideally place stoploss behind 1hr swing failure", "sfp": null}, {"pair": "NAS100", "date": "2026-06-12", "entryTime": "16:43", "exitTime": "17:21", "pnl": null, "rr": 0.1, "reason": "Entered on 5mn fvg  after 1hr F swing", "improve": "Respected plan and waited for trade", "sfp": null}, {"pair": "NAS100", "date": "2026-06-16", "entryTime": "16:19", "exitTime": "21:04", "pnl": null, "rr": 0.1, "reason": "Entered on sell limit after 1hr failure swing", "improve": "Well executed adapted to swing failure before equity open", "sfp": null}, {"pair": "NAS100", "date": "2026-06-17", "entryTime": "15:57", "exitTime": "16:15", "pnl": null, "rr": -0.05, "reason": "Entered on sell limit at swing point", "improve": "Was right on direction but wrong time i should pay attention to high impact news time", "sfp": null}, {"pair": "NAS100", "date": "2026-07-10", "entryTime": "16:21", "exitTime": "16:32", "pnl": null, "rr": -0.05, "reason": "Entered on 15mn fvg in direction of daily biais after MSS", "improve": "daily bias aligned, entry taken without 1hr swing failure confirmation, stopped out by the exact sweep the pattern was designed to filter for", "sfp": null}, {"pair": "NAS100", "date": "2026-07-14", "entryTime": "16:22", "exitTime": "16:34", "pnl": -40.0, "rr": -0.04, "reason": "Entered off 5mn fvg after 1h sfp with daily biais", "improve": "Followed the rules don't ignore choch on 30min", "sfp": "Y"}];
+
+const JOURNAL_KEY = "silverBulletJournal";
+let journalEntries = [];
+let journalFilter = "all";
+
+(function loadJournal() {
+  try {
+    const raw = localStorage.getItem(JOURNAL_KEY);
+    if (raw) {
+      journalEntries = JSON.parse(raw);
+    } else {
+      // first run: seed with imported Notion history
+      journalEntries = LEGACY_JOURNAL.map((e, i) => Object.assign({ id: "jimp" + i, imported: true }, e));
+      localStorage.setItem(JOURNAL_KEY, JSON.stringify(journalEntries));
+    }
+  } catch(e) { journalEntries = []; }
+})();
+
+function saveJournal() {
+  localStorage.setItem(JOURNAL_KEY, JSON.stringify(journalEntries));
+}
+
+let draftSfp = null;
+function setPair(p) {
+  document.getElementById("jPair").value = p;
+  document.querySelectorAll("#jPairRow .pairBtn").forEach(b => b.classList.toggle("selected", b.dataset.pair === p));
+  const tf = p === "NAS100" ? "15m" : "5m";
+  document.getElementById("tfHint").innerHTML = `Entry timeframe: <b>${tf}</b>`;
+}
+
+function setSfp(v) {
+  draftSfp = v;
+  document.getElementById("jSfpY").classList.toggle("selected", v === "Y");
+  document.getElementById("jSfpN").classList.toggle("selected", v === "N");
+  document.getElementById("jSfpNone").classList.toggle("selected", v === null);
+}
+
+let draftPhoto = null;
+
+function handlePhotoSelect(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      // downscale to keep localStorage usage sane — phone photos are 2-5MB raw,
+      // which would blow the ~5-10MB total localStorage budget after just a couple of trades
+      const maxDim = 900;
+      let w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) { h = Math.round(h * (maxDim / w)); w = maxDim; }
+        else { w = Math.round(w * (maxDim / h)); h = maxDim; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      draftPhoto = canvas.toDataURL("image/jpeg", 0.65);
+      document.getElementById("jPhotoPreview").src = draftPhoto;
+      document.getElementById("jPhotoPreviewWrap").style.display = "block";
+      document.getElementById("jPhotoBtn").style.display = "none";
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeDraftPhoto() {
+  draftPhoto = null;
+  document.getElementById("jPhotoInput").value = "";
+  document.getElementById("jPhotoPreviewWrap").style.display = "none";
+  document.getElementById("jPhotoBtn").style.display = "block";
+}
+
+function openLightbox(src) {
+  document.getElementById("lightboxImg").src = src;
+  document.getElementById("lightbox").classList.add("open");
+}
+function closeLightbox() {
+  document.getElementById("lightbox").classList.remove("open");
+}
+
+function resetJournalForm() {
+  setPair("NAS100");
+  document.getElementById("jDate").value = todayKey();
+  document.getElementById("jEntryTime").value = "";
+  document.getElementById("jExitTime").value = "";
+  document.getElementById("jPnl").value = "";
+  document.getElementById("jRR").value = "";
+  document.getElementById("jReason").value = "";
+  document.getElementById("jImprove").value = "";
+  setSfp(null);
+  resetFieldTrackers();
+  removeDraftPhoto();
+}
+
+function saveJournalEntry() {
+  const pair = document.getElementById("jPair").value.trim() || "NAS100";
+  const date = document.getElementById("jDate").value || todayKey();
+  const entryTime = document.getElementById("jEntryTime").value;
+  const exitTime = document.getElementById("jExitTime").value;
+  const pnlRaw = document.getElementById("jPnl").value;
+  const rrRaw = document.getElementById("jRR").value;
+  const reason = document.getElementById("jReason").value.trim();
+  const improve = document.getElementById("jImprove").value.trim();
+
+  const entry = {
+    id: "j" + Date.now(),
+    pair, date, entryTime, exitTime,
+    pnl: pnlRaw !== "" ? parseFloat(pnlRaw) : null,
+    rr: rrRaw !== "" ? parseFloat(rrRaw) : null,
+    reason, improve,
+    sfp: draftSfp,
+    bias: draftBias,
+    smt: draftSmt,
+    slAnchor: draftSlAnchor,
+    photo: draftPhoto,
+    imported: false,
+  };
+  journalEntries.unshift(entry);
+
+  try {
+    saveJournal();
+  } catch(e) {
+    journalEntries.shift(); // roll back — storage is full
+    alert("Storage is full — this photo couldn't be saved. Try removing older trade photos, or save this entry without one.");
+    return;
+  }
+  resetJournalForm();
+  renderJournal();
+}
+
+function deleteJournalEntry(id) {
+  journalEntries = journalEntries.filter(e => e.id !== id);
+  saveJournal();
+  renderJournal();
+}
+
+function clearJournal() {
+  if (!confirm("Clear your entire trade journal, including imported history? This can't be undone.")) return;
+  journalEntries = [];
+  saveJournal();
+  renderJournal();
+}
+
+function setJournalFilter(f) {
+  journalFilter = f;
+  renderJournal();
+}
+
+function renderJournalStats() {
+  const el = document.getElementById("jStatsGrid");
+  const withPnl = journalEntries.filter(e => e.pnl !== null && e.pnl !== undefined);
+  const wins = withPnl.filter(e => e.pnl > 0).length;
+  const winRate = withPnl.length ? Math.round((wins / withPnl.length) * 100) : 0;
+  const totalPnl = withPnl.reduce((sum, e) => sum + e.pnl, 0);
+  el.innerHTML = `
+    <div class="statBox"><div class="num mono">${journalEntries.length}</div><div class="lbl">Trades</div></div>
+    <div class="statBox"><div class="num mono">${withPnl.length ? winRate + "%" : "—"}</div><div class="lbl">Win rate</div></div>
+    <div class="statBox"><div class="num mono" style="color:${totalPnl >= 0 ? '#34d399' : '#fb7185'}">${totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(0)}</div><div class="lbl">Net PNL</div></div>
+  `;
+}
+
+function renderJournalFilters() {
+  const el = document.getElementById("jFilterRow");
+  const pairs = Array.from(new Set(journalEntries.map(e => e.pair).filter(Boolean)));
+  const buttons = ["all"].concat(pairs);
+  el.innerHTML = buttons.map(p => `
+    <button class="jFilterBtn ${journalFilter === p ? "active" : ""}" onclick="setJournalFilter('${p}')">${p === "all" ? "All" : p}</button>
+  `).join("");
+}
+
+function renderJournalList() {
+  const el = document.getElementById("journalList");
+  document.getElementById("jCount").textContent = journalEntries.length;
+  let list = journalFilter === "all" ? journalEntries : journalEntries.filter(e => e.pair === journalFilter);
+  list = list.slice().sort((a,b) => (b.date || "").localeCompare(a.date || ""));
+
+  if (list.length === 0) {
+    el.innerHTML = `<p class="sub">No trades logged yet.</p>`;
+    return;
+  }
+
+  el.innerHTML = list.map(e => {
+    const pnlClass = e.pnl > 0 ? "pos" : e.pnl < 0 ? "neg" : "zero";
+    const pnlText = e.pnl !== null && e.pnl !== undefined ? (e.pnl >= 0 ? "+" : "") + e.pnl.toFixed(2) + "$" : "—";
+    const sfpHtml = e.sfp ? `<span class="jSfp ${e.sfp === "Y" ? "y" : "n"}">1H SFP: ${e.sfp === "Y" ? "yes" : "no"}</span>` : "";
+    const tagParts = [];
+    if (e.bias) tagParts.push(e.bias.charAt(0).toUpperCase() + e.bias.slice(1));
+    if (e.smt) tagParts.push("SMT: " + (e.smt === "na" ? "N/A" : e.smt));
+    if (e.slAnchor) tagParts.push("SL: " + (e.slAnchor === "c2" ? "Candle 2" : "Candle 1 (abnormal vol.)"));
+    const tagsHtml = tagParts.length ? `<div class="jTags">${tagParts.map(t => `<span class="jTagChip">${escapeHtml(t)}</span>`).join("")}</div>` : "";
+    return `<div class="jCard">
+      <div class="jTop">
+        <div>
+          <span class="jPair">${escapeHtml(e.pair || "")}</span>
+          <span class="jDate">${e.date || ""}${e.imported ? '<span class="importedTag">imported</span>' : ''}</span>
+          <div class="jTime">${e.entryTime || "?"} → ${e.exitTime || "?"}</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="jPnl ${pnlClass}">${pnlText}</div>
+          ${e.rr !== null && e.rr !== undefined ? `<div class="jRR">${e.rr}R</div>` : ""}
+          <button class="delBtn" onclick="deleteJournalEntry('${e.id}')">✕</button>
+        </div>
+      </div>
+      ${tagsHtml}
+      ${e.reason ? `<div class="jReason">${escapeHtml(e.reason)}</div>` : ""}
+      ${e.improve ? `<div class="jImprove">${escapeHtml(e.improve)}</div>` : ""}
+      ${sfpHtml}
+      ${e.photo ? `<img class="jThumb" src="${e.photo}" onclick="openLightbox('${e.photo}')" />` : ""}
+    </div>`;
+  }).join("");
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderJournal() {
+  if (!document.getElementById("jDate").value) document.getElementById("jDate").value = todayKey();
+  renderJournalStats();
+  renderJournalFilters();
+  renderJournalList();
+}
+
+/* ============ SAVE / LOAD (full backup) ============ */
+
+function openExportModal() {
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    log: logEntries,
+    journal: journalEntries,
+  };
+  document.getElementById("exportText").value = JSON.stringify(payload);
+  document.getElementById("exportOverlay").classList.add("open");
+}
+function closeExportModal() {
+  document.getElementById("exportOverlay").classList.remove("open");
+}
+function copyExport() {
+  const ta = document.getElementById("exportText");
+  ta.select();
+  ta.setSelectionRange(0, 999999);
+  try {
+    navigator.clipboard.writeText(ta.value).catch(() => document.execCommand("copy"));
+  } catch(e) {
+    try { document.execCommand("copy"); } catch(e2) {}
+  }
+}
+function openImportModal() {
+  document.getElementById("importText").value = "";
+  document.getElementById("importOverlay").classList.add("open");
+}
+function closeImportModal() {
+  document.getElementById("importOverlay").classList.remove("open");
+}
+function doImport() {
+  const raw = document.getElementById("importText").value.trim();
+  if (!raw) return;
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch(e) {
+    alert("That doesn't look like a valid save code. Nothing was changed.");
+    return;
+  }
+  if (!parsed || (!Array.isArray(parsed.log) && !Array.isArray(parsed.journal))) {
+    alert("That save code doesn't match this app's format. Nothing was changed.");
+    return;
+  }
+  if (!confirm("This replaces your current Bias Log and Journal with the imported save. Continue?")) return;
+
+  try {
+    if (Array.isArray(parsed.journal)) {
+      journalEntries = parsed.journal;
+      localStorage.setItem(JOURNAL_KEY, JSON.stringify(journalEntries));
+    }
+  } catch(e) {
+    alert("Storage is full — the import couldn't be completed. Try clearing some old trade photos first.");
+    return;
+  }
+
+  closeImportModal();
+  resetFieldTrackers();
+  renderJournal();
+}
+
+renderJournal();
+</script>
+</body>
+</html>
