@@ -760,6 +760,7 @@ async function fxFetchTwelveData(){
   const res = await fetch(url);
   if(!res.ok) throw new Error('TwelveData HTTP ' + res.status);
   const data = await res.json();
+  console.log('TwelveData raw response:', data); // temporary diagnostic — check browser console if this keeps failing
   if(data && data.status === 'error') throw new Error('TwelveData: ' + (data.message || 'error'));
 
   const quotes = {}; // key: "EURUSD" -> {price, prevClose, pctChange}
