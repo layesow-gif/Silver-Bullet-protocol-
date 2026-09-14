@@ -752,15 +752,17 @@ function fxDxyFormula(EURUSD, USDJPY, GBPUSD, USDCAD, USDSEK, USDCHF){
 }
 
 /* ---- Provider A: TwelveData (real intraday quote + previous_close + percent_change) ---- */
+// Only fetch majors + USDSEK (8 symbols = right at the free tier's 8-credits/minute cap).
+// All 10 crosses are derived mathematically from these, not fetched directly — see fxDeriveCrosses().
 async function fxFetchTwelveData(){
   if(!TWELVEDATA_API_KEY) throw new Error('No API key set');
-  const symbols = FX_MAJORS.concat(FX_CROSSES).concat([DXY_EXTRA_SYMBOL]);
+  const symbols = FX_MAJORS.concat([DXY_EXTRA_SYMBOL]);
   const slashSymbols = symbols.map(s => s.slice(0,3) + '/' + s.slice(3,6));
   const url = `https://api.twelvedata.com/quote?symbol=${slashSymbols.join(',')}&apikey=${TWELVEDATA_API_KEY}`;
   const res = await fetch(url);
   if(!res.ok) throw new Error('TwelveData HTTP ' + res.status);
   const data = await res.json();
-  console.log('TwelveData raw response:', data); // temporary diagnostic — check browser console if this keeps failing
+  console.log('TwelveData raw response:', data); // diagnostic — check browser console if this keeps failing
   if(data && data.status === 'error') throw new Error('TwelveData: ' + (data.message || 'error'));
 
   const quotes = {}; // key: "EURUSD" -> {price, prevClose, pctChange}
@@ -777,6 +779,35 @@ async function fxFetchTwelveData(){
     };
   });
   return quotes;
+}
+
+// USD-per-unit-of-currency, derived from the 7 majors, for both "now" and "prevClose".
+function fxPerUsdMaps(quotes){
+  const now = { USD: 1 }, prev = { USD: 1 };
+  // CCYUSD pairs: perUSD = price directly
+  ['GBP','EUR','AUD','NZD'].forEach(c=>{
+    const q = quotes[c+'USD'];
+    now[c] = q.price; prev[c] = q.prevClose;
+  });
+  // USDCCY pairs: perUSD = 1/price
+  ['CAD','CHF','JPY'].forEach(c=>{
+    const q = quotes['USD'+c];
+    now[c] = 1/q.price; prev[c] = 1/q.prevClose;
+  });
+  return {now, prev};
+}
+
+// Derive all crosses + their % change exactly (not approximated) from the majors' now/prev prices.
+function fxDeriveCrosses(quotes){
+  const {now, prev} = fxPerUsdMaps(quotes);
+  const out = {};
+  FX_CROSSES.forEach(name=>{
+    const base = name.slice(0,3), quote = name.slice(3,6);
+    const priceNow = now[base] / now[quote];
+    const priceNowPrev = prev[base] / prev[quote];
+    out[name] = { price: priceNow, prevClose: priceNowPrev, pctChange: (priceNow/priceNowPrev - 1) * 100 };
+  });
+  return out;
 }
 
 /* ---- Provider B fallback: Frankfurter (ECB, once-daily fix) ---- */
@@ -960,9 +991,11 @@ async function loadFxAll(force){
       const dxyChg = (dxyNow/dxyPrev - 1) * 100;
 
       const majors = FX_MAJORS.map(name => ({name, base:name.slice(0,3), quote:name.slice(3,6), price: quotes[name].price}));
-      const crosses = FX_CROSSES.map(name => ({name, base:name.slice(0,3), quote:name.slice(3,6), price: quotes[name].price}));
+      const crossQuotes = fxDeriveCrosses(quotes);
+      const crosses = FX_CROSSES.map(name => ({name, base:name.slice(0,3), quote:name.slice(3,6), price: crossQuotes[name].price}));
       const chgMap = {};
-      FX_MAJORS.concat(FX_CROSSES).forEach(name => { chgMap[name] = quotes[name].pctChange; });
+      FX_MAJORS.forEach(name => { chgMap[name] = quotes[name].pctChange; });
+      FX_CROSSES.forEach(name => { chgMap[name] = crossQuotes[name].pctChange; });
 
       const payload = { majors, crosses, chgMap, dxyVal: dxyNow, dxyChg, source: 'TwelveData (intraday)' };
       localStorage.setItem(FX_LATEST_CACHE_KEY, JSON.stringify({ts: Date.now(), payload}));
