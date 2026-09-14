@@ -196,6 +196,14 @@
   .conflScore.mid { color: #d4a24e; }
   .conflScore.low { color: #fb7185; }
   .fxNote { font-size: 11px; color: #71717a; margin-top: 8px; line-height: 1.5; }
+  .reasonList { margin-top: 10px; border-top: 1px solid #1c1c1f; padding-top: 8px; }
+  .reasonRow { font-size: 11px; line-height: 1.5; padding: 5px 0; border-bottom: 1px solid #18181b; }
+  .reasonRow:last-child { border-bottom: none; }
+  .reasonRow .rPair { color: #d4a24e; font-weight: 650; font-family: ui-monospace, monospace; margin-right: 4px; }
+  .reasonRow .rConclusion.full { color: #34d399; font-weight: 650; }
+  .reasonRow .rConclusion.partial { color: #d4a24e; font-weight: 650; }
+  .reasonRow .rConclusion.none { color: #fb7185; font-weight: 650; }
+  .reasonRow .rConclusion.wait { color: #71717a; font-weight: 650; }
 </style>
 </head>
 <body>
@@ -358,10 +366,12 @@
     <div class="card">
       <div class="cardTitle">FX Majors</div>
       <div id="majorsTable">Loading…</div>
+      <div id="majorsReasoning" class="reasonList"></div>
     </div>
     <div class="card">
       <div class="cardTitle">Crosses</div>
       <div id="crossesTable">Loading…</div>
+      <div id="crossesReasoning" class="reasonList"></div>
     </div>
     <div class="fxNote">
       <span class="dot yes"></span> agrees &nbsp; <span class="dot no"></span> conflicts &nbsp; <span class="dot na"></span> n/a (non-USD pair vs DXY)<br>
@@ -702,32 +712,73 @@ renderJournal();
 
 /* ============ FX BIAS BOARD (forex only — no BTC/metals/indices) ============ */
 
+// ---- Set your free TwelveData key here for real intraday data (no credit card, 800 credits/day). ----
+// Sign up: https://twelvedata.com/register  →  key: https://twelvedata.com/account/api-keys
+// Leave blank to automatically fall back to a once-daily (ECB fix) provider instead.
+const TWELVEDATA_API_KEY = "a79c2e67c84a43c88eef6c11316304e0";
+
 const FX_BASELINE_KEY = 'sbFxBaseline_v2';
-const FX_LATEST_CACHE_KEY = 'sbFxLatestCache_v2';
+const FX_LATEST_CACHE_KEY = 'sbFxLatestCache_v3';
 const FX_LATEST_CACHE_MS = 10 * 60 * 1000;
+
+// Minimum |% change| before a move counts as real direction rather than noise/no-data.
+// Below this, confluence dots show as n/a (gray) instead of a false "agree".
+const FX_NOISE_FLOOR = 0.02;
 
 const CCYS = ['USD','EUR','GBP','JPY','AUD','NZD','CAD','CHF','SEK'];
 const FX_MAJORS = ['GBPUSD','EURUSD','AUDUSD','NZDUSD','USDCAD','USDCHF','USDJPY'];
 const FX_CROSSES = ['GBPJPY','EURJPY','AUDJPY','CADJPY','GBPAUD','EURAUD','GBPCHF','EURCAD','CHFJPY','GBPCAD'];
+const DXY_EXTRA_SYMBOL = 'USDSEK'; // only needed for the DXY formula, not displayed as a row
 
 function fxFmtPct(x){ return (x>=0?'+':'') + x.toFixed(2) + '%'; }
-function fxChgClass(x){ return x > 0.01 ? 'up' : x < -0.01 ? 'down' : 'flat'; }
-function fxBiasWord(x){ return x > 0.01 ? 'Bullish' : x < -0.01 ? 'Bearish' : 'Flat'; }
-function fxBiasClass(x){ return x > 0.01 ? 'bull' : x < -0.01 ? 'bear' : 'flat'; }
+function fxChgClass(x){ return x > FX_NOISE_FLOOR ? 'up' : x < -FX_NOISE_FLOOR ? 'down' : 'flat'; }
+function fxBiasWord(x){ return x > FX_NOISE_FLOOR ? 'Bullish' : x < -FX_NOISE_FLOOR ? 'Bearish' : 'Flat'; }
+function fxBiasClass(x){ return x > FX_NOISE_FLOOR ? 'bull' : x < -FX_NOISE_FLOOR ? 'bear' : 'flat'; }
 function fxPairPrice(rateEUR, base, quote){ return rateEUR[quote] / rateEUR[base]; }
 
-function fxComputeDXY(rateEUR){
+function fxComputeDXYFromEUR(rateEUR){
   const EURUSD = fxPairPrice(rateEUR,'EUR','USD');
   const USDJPY = fxPairPrice(rateEUR,'USD','JPY');
   const GBPUSD = fxPairPrice(rateEUR,'GBP','USD');
   const USDCAD = fxPairPrice(rateEUR,'USD','CAD');
   const USDSEK = fxPairPrice(rateEUR,'USD','SEK');
   const USDCHF = fxPairPrice(rateEUR,'USD','CHF');
+  return fxDxyFormula(EURUSD, USDJPY, GBPUSD, USDCAD, USDSEK, USDCHF);
+}
+function fxDxyFormula(EURUSD, USDJPY, GBPUSD, USDCAD, USDSEK, USDCHF){
   return 50.14348112
     * Math.pow(EURUSD, -0.576) * Math.pow(USDJPY, 0.136) * Math.pow(GBPUSD, -0.119)
     * Math.pow(USDCAD, 0.091) * Math.pow(USDSEK, 0.042) * Math.pow(USDCHF, 0.036);
 }
 
+/* ---- Provider A: TwelveData (real intraday quote + previous_close + percent_change) ---- */
+async function fxFetchTwelveData(){
+  if(!TWELVEDATA_API_KEY) throw new Error('No API key set');
+  const symbols = FX_MAJORS.concat(FX_CROSSES).concat([DXY_EXTRA_SYMBOL]);
+  const slashSymbols = symbols.map(s => s.slice(0,3) + '/' + s.slice(3,6));
+  const url = `https://api.twelvedata.com/quote?symbol=${slashSymbols.join(',')}&apikey=${TWELVEDATA_API_KEY}`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('TwelveData HTTP ' + res.status);
+  const data = await res.json();
+  if(data && data.status === 'error') throw new Error('TwelveData: ' + (data.message || 'error'));
+
+  const quotes = {}; // key: "EURUSD" -> {price, prevClose, pctChange}
+  symbols.forEach((sym, i) => {
+    const key = slashSymbols[i];
+    const q = symbols.length === 1 ? data : data[key];
+    if(!q || q.status === 'error' || q.close === undefined){
+      throw new Error(`TwelveData: missing data for ${sym}`);
+    }
+    quotes[sym] = {
+      price: parseFloat(q.close),
+      prevClose: parseFloat(q.previous_close),
+      pctChange: parseFloat(q.percent_change),
+    };
+  });
+  return quotes;
+}
+
+/* ---- Provider B fallback: Frankfurter (ECB, once-daily fix) ---- */
 async function fxFetchFrankfurterLatest(){
   const symbols = CCYS.filter(c=>c!=='EUR').join(',');
   const res = await fetch(`https://api.frankfurter.app/latest?from=EUR&to=${symbols}`);
@@ -745,21 +796,15 @@ async function fxFetchOpenErApiLatest(){
   CCYS.forEach(c=>{ if(data.rates[c] !== undefined) out[c] = data.rates[c]; });
   return out;
 }
-async function fxFetchLatestRates(){
+async function fxFetchEodFallback(){
   const errors = [];
-  try{ return { rates: await fxFetchFrankfurterLatest(), source: 'Frankfurter (ECB)' }; }
+  try{ return { rates: await fxFetchFrankfurterLatest(), source: 'Frankfurter (ECB, daily)' }; }
   catch(e1){ errors.push('Frankfurter: ' + e1.message); }
-  try{ return { rates: await fxFetchOpenErApiLatest(), source: 'open.er-api.com' }; }
+  try{ return { rates: await fxFetchOpenErApiLatest(), source: 'open.er-api.com (daily)' }; }
   catch(e2){ errors.push('open.er-api: ' + e2.message); }
   throw new Error(errors.join(' | '));
 }
 
-function fxBuildPairList(names, rateEUR){
-  return names.map(name=>{
-    const base = name.slice(0,3), quote = name.slice(3,6);
-    return {name, base, quote, price: fxPairPrice(rateEUR, base, quote)};
-  });
-}
 function fxCurrencyStrength(allPairs, chgMap){
   const sums = {}; const counts = {};
   CCYS.forEach(c=>{sums[c]=0; counts[c]=0;});
@@ -787,7 +832,7 @@ function fxRenderStrength(strength){
   const maxAbs = Math.max(1, ...ranked.map(r=>Math.abs(r.v)));
   document.getElementById('strengthContent').innerHTML = ranked.map(r=>{
     const pct = Math.min(100, Math.abs(r.v)/maxAbs*100);
-    const color = r.v>0.01 ? '#34d399' : r.v<-0.01 ? '#fb7185' : '#52525b';
+    const color = r.v>FX_NOISE_FLOOR ? '#34d399' : r.v<-FX_NOISE_FLOOR ? '#fb7185' : '#52525b';
     const side = r.v>=0 ? `left:50%; width:${pct/2}%;` : `left:${50-pct/2}%; width:${pct/2}%;`;
     return `<div class="strengthRow">
       <div class="strengthLbl">${r.c}</div>
@@ -796,28 +841,38 @@ function fxRenderStrength(strength){
     </div>`;
   }).join('');
 }
+
+// Tri-state: true = agree, false = conflict, null = n/a (move too small to mean anything)
+function fxDot(currencyStrengthVal, pairChg, isQuoteSide){
+  if(Math.abs(pairChg) < FX_NOISE_FLOOR) return null;
+  const s = isQuoteSide ? -currencyStrengthVal : currencyStrengthVal;
+  if(Math.abs(s) < FX_NOISE_FLOOR) return null;
+  return Math.sign(s) === Math.sign(pairChg);
+}
+
 function fxRenderPairTable(elId, pairs, chgMap, strength, dxyChg){
   const rows = pairs.map(p=>{
     const chg = chgMap[p.name] || 0;
-    const baseAgree = Math.sign(strength[p.base]||0) === Math.sign(chg) || Math.abs(chg)<0.01;
-    const quoteAgree = Math.sign(-(strength[p.quote]||0)) === Math.sign(chg) || Math.abs(chg)<0.01;
+    const baseAgree = fxDot(strength[p.base]||0, chg, false);
+    const quoteAgree = fxDot(strength[p.quote]||0, chg, true);
     const isUsdPair = p.base==='USD' || p.quote==='USD';
     let dxyAgree = null;
-    if(isUsdPair){
+    if(isUsdPair && Math.abs(chg) >= FX_NOISE_FLOOR && Math.abs(dxyChg) >= FX_NOISE_FLOOR){
       const expectedSign = p.base==='USD' ? Math.sign(dxyChg) : -Math.sign(dxyChg);
-      dxyAgree = expectedSign === Math.sign(chg) || Math.abs(chg)<0.01 || Math.abs(dxyChg)<0.01;
+      dxyAgree = expectedSign === Math.sign(chg);
     }
     const dots = [baseAgree, quoteAgree, isUsdPair ? dxyAgree : null];
+    const applicable = dots.filter(d=>d!==null).length;
     const score = dots.filter(d=>d===true).length;
     const dotHtml = dots.map(d=>`<span class="dot ${d===null?'na':d?'yes':'no'}"></span>`).join('');
-    const applicable = isUsdPair ? 3 : 2;
-    const conflClass = score>=applicable ? 'high' : score===applicable-1 ? 'mid' : 'low';
+    const conflClass = applicable===0 ? 'mid' : score>=applicable ? 'high' : score>0 ? 'mid' : 'low';
+    const scoreText = applicable===0 ? '—' : `${score}/${applicable}`;
     return `<tr>
       <td class="pairName">${p.name}</td>
       <td>${p.price.toFixed(p.price>50?2:5)}</td>
       <td class="chgTag ${fxChgClass(chg)}" style="display:table-cell; border-radius:0; padding:7px 6px;">${fxFmtPct(chg)}</td>
       <td>${dotHtml}</td>
-      <td class="conflScore ${conflClass}">${score}/${applicable}</td>
+      <td class="conflScore ${conflClass}">${scoreText}</td>
     </tr>`;
   }).join('');
   document.getElementById(elId).innerHTML = `<table class="fxTable">
@@ -825,6 +880,56 @@ function fxRenderPairTable(elId, pairs, chgMap, strength, dxyChg){
     <tbody>${rows}</tbody>
   </table>`;
 }
+function fxCcyWord(v){ return v > FX_NOISE_FLOOR ? 'strengthening' : v < -FX_NOISE_FLOOR ? 'weakening' : 'flat'; }
+
+function fxReasonSentence(p, chg, strength, dxyChg){
+  const baseVal = strength[p.base] || 0;
+  const quoteVal = strength[p.quote] || 0;
+  const isUsdPair = p.base==='USD' || p.quote==='USD';
+
+  const baseAgree = fxDot(baseVal, chg, false);
+  const quoteAgree = fxDot(quoteVal, chg, true);
+  let dxyAgree = null;
+  if(isUsdPair && Math.abs(chg) >= FX_NOISE_FLOOR && Math.abs(dxyChg) >= FX_NOISE_FLOOR){
+    const expectedSign = p.base==='USD' ? Math.sign(dxyChg) : -Math.sign(dxyChg);
+    dxyAgree = expectedSign === Math.sign(chg);
+  }
+  const dots = [baseAgree, quoteAgree, isUsdPair ? dxyAgree : null];
+  const applicable = dots.filter(d=>d!==null).length;
+  const score = dots.filter(d=>d===true).length;
+
+  const parts = [];
+  parts.push(`${p.base} ${fxCcyWord(baseVal)}`);
+  parts.push(`${p.quote} ${fxCcyWord(quoteVal)}`);
+  if(isUsdPair){
+    const dxyWord = dxyChg > FX_NOISE_FLOOR ? 'DXY bullish (USD strong)' : dxyChg < -FX_NOISE_FLOOR ? 'DXY bearish (USD weak)' : 'DXY flat';
+    parts.push(dxyWord);
+  }
+  const setup = parts.join(', ');
+
+  const moveWord = chg > FX_NOISE_FLOOR ? 'bullish' : chg < -FX_NOISE_FLOOR ? 'bearish' : 'flat';
+  let conclusion, cClass;
+  if(Math.abs(chg) < FX_NOISE_FLOOR){
+    conclusion = 'no real move yet — nothing to confirm'; cClass = 'wait';
+  } else if(applicable === 0){
+    conclusion = 'not enough separation to judge — treat as neutral'; cClass = 'wait';
+  } else if(score === applicable){
+    conclusion = `full confluence for the ${moveWord} move`; cClass = 'full';
+  } else if(score === 0){
+    conclusion = `no confluence — conflicts with the ${moveWord} move`; cClass = 'none';
+  } else {
+    conclusion = `partial confluence (${score}/${applicable}) for the ${moveWord} move`; cClass = 'partial';
+  }
+
+  return `<div class="reasonRow"><span class="rPair">${p.name}</span>${setup} → <span class="rConclusion ${cClass}">${conclusion}</span></div>`;
+}
+
+function fxRenderReasoning(elId, pairs, chgMap, strength, dxyChg){
+  const el = document.getElementById(elId);
+  if(!el) return;
+  el.innerHTML = pairs.map(p => fxReasonSentence(p, chgMap[p.name] || 0, strength, dxyChg)).join('');
+}
+
 function fxShowError(msg){
   document.getElementById('fxErrArea').innerHTML = `<div class="fxErrBox"><b>Couldn't reach live FX data.</b><br>${msg}<br><br>Showing last cached data below if available. Tap Refresh to retry.</div>`;
 }
@@ -837,67 +942,91 @@ async function loadFxAll(force){
   btn.disabled = true;
   fxClearError();
 
-  let rateEUR = null, source = null, fetchFailed = false, fetchErrMsg = '';
-  let cachedLatest = null;
-  try{ cachedLatest = JSON.parse(localStorage.getItem(FX_LATEST_CACHE_KEY)); }catch(e){}
-
-  if(!force && cachedLatest && (Date.now() - cachedLatest.ts) < FX_LATEST_CACHE_MS){
-    rateEUR = cachedLatest.rates;
-    source = cachedLatest.source + ' (cached)';
-  } else {
-    try{
-      const result = await fxFetchLatestRates();
-      rateEUR = result.rates; source = result.source;
-      localStorage.setItem(FX_LATEST_CACHE_KEY, JSON.stringify({ts: Date.now(), rates: rateEUR, source: result.source}));
-    }catch(err){
-      fetchFailed = true; fetchErrMsg = err.message;
-      console.error('FX fetch failed:', err);
-      if(cachedLatest){ rateEUR = cachedLatest.rates; source = cachedLatest.source + ' (stale cache)'; }
-    }
-  }
-
-  if(!rateEUR){
-    statusEl.textContent = 'No data available.';
-    fxShowError(fetchErrMsg || 'Unknown error.');
+  let cached = null;
+  try{ cached = JSON.parse(localStorage.getItem(FX_LATEST_CACHE_KEY)); }catch(e){}
+  if(!force && cached && (Date.now() - cached.ts) < FX_LATEST_CACHE_MS){
+    fxRenderFromPayload(cached.payload, cached.payload.source + ' (cached)');
     btn.disabled = false;
     return;
   }
-  if(fetchFailed) fxShowError(fetchErrMsg);
 
-  const today = todayKey();
-  let baseline = null;
-  try{ baseline = JSON.parse(localStorage.getItem(FX_BASELINE_KEY)); }catch(e){}
-  if(!baseline || baseline.date !== today){
-    baseline = { date: today, rates: rateEUR };
-    localStorage.setItem(FX_BASELINE_KEY, JSON.stringify(baseline));
+  // ---- Try TwelveData first (real intraday) ----
+  if(TWELVEDATA_API_KEY){
+    try{
+      const quotes = await fxFetchTwelveData();
+      const dxyNow = fxDxyFormula(quotes.EURUSD.price, quotes.USDJPY.price, quotes.GBPUSD.price, quotes.USDCAD.price, quotes.USDSEK.price, quotes.USDCHF.price);
+      const dxyPrev = fxDxyFormula(quotes.EURUSD.prevClose, quotes.USDJPY.prevClose, quotes.GBPUSD.prevClose, quotes.USDCAD.prevClose, quotes.USDSEK.prevClose, quotes.USDCHF.prevClose);
+      const dxyChg = (dxyNow/dxyPrev - 1) * 100;
+
+      const majors = FX_MAJORS.map(name => ({name, base:name.slice(0,3), quote:name.slice(3,6), price: quotes[name].price}));
+      const crosses = FX_CROSSES.map(name => ({name, base:name.slice(0,3), quote:name.slice(3,6), price: quotes[name].price}));
+      const chgMap = {};
+      FX_MAJORS.concat(FX_CROSSES).forEach(name => { chgMap[name] = quotes[name].pctChange; });
+
+      const payload = { majors, crosses, chgMap, dxyVal: dxyNow, dxyChg, source: 'TwelveData (intraday)' };
+      localStorage.setItem(FX_LATEST_CACHE_KEY, JSON.stringify({ts: Date.now(), payload}));
+      fxRenderFromPayload(payload, payload.source);
+      btn.disabled = false;
+      return;
+    }catch(err){
+      console.error('TwelveData failed, falling back:', err);
+      fxShowError('TwelveData: ' + err.message + ' — falling back to daily-fix data.');
+    }
   }
-  const prevRates = baseline.rates;
-  const justSetBaseline = (JSON.stringify(prevRates) === JSON.stringify(rateEUR));
 
-  const dxyLast = fxComputeDXY(rateEUR);
-  const dxyPrev = fxComputeDXY(prevRates);
-  const dxyChgFinal = justSetBaseline ? 0 : (dxyLast/dxyPrev - 1) * 100;
+  // ---- Fallback: once-daily EOD provider with self-maintained baseline ----
+  try{
+    const result = await fxFetchEodFallback();
+    const rateEUR = result.rates;
+    const today = todayKey();
+    let baseline = null;
+    try{ baseline = JSON.parse(localStorage.getItem(FX_BASELINE_KEY)); }catch(e){}
+    if(!baseline || baseline.date !== today){
+      baseline = { date: today, rates: rateEUR };
+      localStorage.setItem(FX_BASELINE_KEY, JSON.stringify(baseline));
+    }
+    const prevRates = baseline.rates;
+    const justSet = (JSON.stringify(prevRates) === JSON.stringify(rateEUR));
 
-  const majors = fxBuildPairList(FX_MAJORS, rateEUR);
-  const crosses = fxBuildPairList(FX_CROSSES, rateEUR);
-  const allPairs = majors.concat(crosses);
-  const chgMap = {};
-  allPairs.forEach(p=>{
-    const priceNow = fxPairPrice(rateEUR, p.base, p.quote);
-    const pricePrev = fxPairPrice(prevRates, p.base, p.quote);
-    chgMap[p.name] = justSetBaseline ? 0 : (priceNow/pricePrev - 1) * 100;
-  });
-  const strength = fxCurrencyStrength(allPairs, chgMap);
+    const dxyNow = fxComputeDXYFromEUR(rateEUR);
+    const dxyPrevVal = fxComputeDXYFromEUR(prevRates);
+    const dxyChg = justSet ? 0 : (dxyNow/dxyPrevVal - 1) * 100;
 
-  fxRenderDXY(dxyLast, dxyChgFinal);
-  fxRenderStrength(strength);
-  fxRenderPairTable('majorsTable', majors, chgMap, strength, dxyChgFinal);
-  fxRenderPairTable('crossesTable', crosses, chgMap, strength, dxyChgFinal);
+    const majors = FX_MAJORS.map(name => ({name, base:name.slice(0,3), quote:name.slice(3,6), price: fxPairPrice(rateEUR, name.slice(0,3), name.slice(3,6))}));
+    const crosses = FX_CROSSES.map(name => ({name, base:name.slice(0,3), quote:name.slice(3,6), price: fxPairPrice(rateEUR, name.slice(0,3), name.slice(3,6))}));
+    const chgMap = {};
+    FX_MAJORS.concat(FX_CROSSES).forEach(name => {
+      const b = name.slice(0,3), q = name.slice(3,6);
+      const now = fxPairPrice(rateEUR, b, q), prev = fxPairPrice(prevRates, b, q);
+      chgMap[name] = justSet ? 0 : (now/prev - 1) * 100;
+    });
 
-  statusEl.textContent = justSetBaseline
-    ? `Baseline set for ${today} · source: ${source} · % change available on next refresh`
-    : `Live · vs baseline ${baseline.date} · source: ${source}`;
+    const payload = { majors, crosses, chgMap, dxyVal: dxyNow, dxyChg, source: result.source + (justSet ? ' · baseline just set' : ' · vs ' + baseline.date) };
+    localStorage.setItem(FX_LATEST_CACHE_KEY, JSON.stringify({ts: Date.now(), payload}));
+    fxRenderFromPayload(payload, payload.source);
+  }catch(err){
+    console.error('FX fetch failed entirely:', err);
+    if(cached){
+      fxShowError(err.message);
+      fxRenderFromPayload(cached.payload, cached.payload.source + ' (stale cache)');
+    } else {
+      statusEl.textContent = 'No data available.';
+      fxShowError(err.message);
+    }
+  }
   btn.disabled = false;
+}
+
+function fxRenderFromPayload(payload, statusSuffix){
+  const allPairs = payload.majors.concat(payload.crosses);
+  const strength = fxCurrencyStrength(allPairs, payload.chgMap);
+  fxRenderDXY(payload.dxyVal, payload.dxyChg);
+  fxRenderStrength(strength);
+  fxRenderPairTable('majorsTable', payload.majors, payload.chgMap, strength, payload.dxyChg);
+  fxRenderPairTable('crossesTable', payload.crosses, payload.chgMap, strength, payload.dxyChg);
+  fxRenderReasoning('majorsReasoning', payload.majors, payload.chgMap, strength, payload.dxyChg);
+  fxRenderReasoning('crossesReasoning', payload.crosses, payload.chgMap, strength, payload.dxyChg);
+  document.getElementById('fxStatus').textContent = `Live · source: ${statusSuffix}`;
 }
 
 document.getElementById('fxRefreshBtn').addEventListener('click', ()=>loadFxAll(true));
