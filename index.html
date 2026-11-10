@@ -675,8 +675,10 @@ function renderJournalList() {
         <div style="text-align:right;">
           <div class="jRRval ${rrClass}">${rrText}</div>
           ${e.outcome ? `<div class="jOutcome ${e.outcome}">${e.outcome === 'be' ? 'BE' : e.outcome}</div>` : ""}
-          <button class="delBtn" onclick="deleteJournalEntry('${e.id}')">✕</button>
-          <button class="delBtn" style="color:#d4a24e;padding:6px 8px;" onclick="startEdit('${e.id}')">Edit</button>
+          <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
+            <button class="delBtn" style="float:none;color:#d4a24e;font-size:12px;padding:6px 10px;border:1px solid #3f2f18;border-radius:6px;" onclick="startEdit('${e.id}')">Edit</button>
+            <button class="delBtn" style="float:none;color:#fb7185;font-size:12px;padding:6px 10px;border:1px solid #4c1d2b;border-radius:6px;" onclick="deleteJournalEntry('${e.id}')">Delete</button>
+          </div>
         </div>
       </div>
       ${tagsHtml}
@@ -762,7 +764,7 @@ var css=document.createElement('style');
 css.textContent='.pairBtn.wkPick{border-color:#d4a24e;color:#d4a24e}.wkRow{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #27272a}.wkL{color:#34d399;font-weight:650}.wkS{color:#fb7185;font-weight:650}.wkSub{font-size:11px;color:#71717a}.wkTbl{width:100%;border-collapse:collapse;font-size:12px;font-family:ui-monospace,monospace}.wkTbl th,.wkTbl td{padding:6px;text-align:right;border-bottom:1px solid #27272a;white-space:nowrap}.wkTbl th:first-child,.wkTbl td:first-child{text-align:left}.wkTbl th{color:#71717a;font-weight:500}.wkTbl tr.pk td:first-child{color:#d4a24e;font-weight:700}.wkScroll{overflow-x:auto}';
 document.head.appendChild(css);
 var tab=document.getElementById('fxTab');
-tab.insertAdjacentHTML('afterbegin','<div class="card"><div class="cardTitle">Weekly picks (4H data, run on weekends)</div><div class="fxTopRow"><button class="refreshBtn mono" id="wkBtn">Run weekly scan</button><span class="fxStatus mono" id="wkStatus">Not run yet. Takes about 3 min.</span></div><div id="wkPicks"></div><div id="wkStrength"></div><div class="wkScroll" id="wkTable"></div><div class="fxNote">Score 0-100: strength spread 40, 1-week agreement 15, trend 20, pullback location 25. Picks never share a currency. Check the news calendar first.</div></div>');
+tab.insertAdjacentHTML('afterbegin','<div class="card"><div class="cardTitle">Weekly picks (4H data, run on weekends)</div><div class="fxTopRow"><button class="refreshBtn mono" id="wkBtn">Run weekly scan</button><span class="fxStatus mono" id="wkStatus">Not run yet. Takes about 3 min.</span></div><div id="wkPicks"></div><div id="wkStrength"></div><div class="wkScroll" id="wkTable"></div><div class="fxNote">Score 0-100: strength spread 40, 1-week agreement 15, trend 20, pullback location 25. Picks are skipped if they move too closely with a higher-ranked pick (correlation 0.6 or more, direction-adjusted). Check the news calendar first.</div></div>');
 document.getElementById('wkBtn').addEventListener('click',scan);
 
 function picksSet(){try{var c=JSON.parse(localStorage.getItem('sbWeeklyScan_v1')||'null');if(c&&c.picks)return new Set(c.picks)}catch(e){}return new Set()}
@@ -775,7 +777,8 @@ async function get(pair){
   var b=j.values.slice().reverse().map(function(v){return{h:+v.high,l:+v.low,c:+v.close}});
   var c=b.map(function(x){return x.c}),n=c.length-1,tr=0;
   for(var i=n-13;i<=n;i++)tr+=Math.max(b[i].h-b[i].l,Math.abs(b[i].h-c[i-1]),Math.abs(b[i].l-c[i-1]));
-  return{r1:(c[n]/c[n-30]-1)*100,r4:(c[n]/c[n-120]-1)*100,p:c[n],e50:ema(c,50),e200:ema(c,200),atr:tr/14};
+  var rets=[];for(var k=n-119;k<=n;k++)rets.push(Math.round((c[k]/c[k-1]-1)*1e6)/1e4);
+  return{rets:rets,r1:(c[n]/c[n-30]-1)*100,r4:(c[n]/c[n-120]-1)*100,p:c[n],e50:ema(c,50),e200:ema(c,200),atr:tr/14};
 }
 async function scan(){
   var btn=document.getElementById('wkBtn'),st=document.getElementById('wkStatus');
@@ -817,12 +820,20 @@ function render(data,t){
     r.score=Math.round(st+r.tr+lo);
   });
   rows.sort(function(a,b){return b.score-a.score});
-  var used={},picks=[];
+  var CORR_MAX=0.6,hasR=rows.every(function(r){return r.d.rets&&r.d.rets.length>20});
+  function corr(a,b){var n=Math.min(a.length,b.length),ma=0,mb=0,i;a=a.slice(-n);b=b.slice(-n);for(i=0;i<n;i++){ma+=a[i];mb+=b[i]}ma/=n;mb/=n;var sab=0,saa=0,sbb=0;for(i=0;i<n;i++){var x=a[i]-ma,y=b[i]-mb;sab+=x*y;saa+=x*x;sbb+=y*y}return sab/Math.sqrt(saa*sbb||1)}
+  var used={},picks=[],skipped=[];
   rows.forEach(function(r){
-    if(picks.length>=3||used[r.b]||used[r.q])return;
-    used[r.b]=1;used[r.q]=1;picks.push(r);r.pick=1;
+    if(picks.length>=3)return;
+    if(hasR){
+      var hit=null;
+      for(var j=0;j<picks.length&&!hit;j++){var cc=corr(r.d.rets,picks[j].d.rets)*r.dir*picks[j].dir;if(Math.abs(cc)>=CORR_MAX)hit={p:picks[j].p,c:cc}}
+      if(hit){if(skipped.length<5)skipped.push(r.p+' '+(r.dir>0?'long':'short')+' ('+r.score+'): same idea as '+hit.p+' (r '+hit.c.toFixed(2)+')');return}
+    }else{if(used[r.b]||used[r.q])return;used[r.b]=1;used[r.q]=1}
+    picks.push(r);r.pick=1;
   });
-  document.getElementById('wkPicks').innerHTML=picks.map(function(r){return '<div class="wkRow"><span><span class="'+(r.dir>0?'wkL':'wkS')+'">'+(r.dir>0?'Long':'Short')+' '+r.p+'</span><br><span class="wkSub">'+r.b+(r.sp4>0?' stronger':' weaker')+' than '+r.q+' · '+r.x.toFixed(1)+' ATR from EMA50</span></span><span class="mono" style="font-weight:700">'+r.score+'</span></div>'}).join('')+'<div class="wkSub" style="margin-top:6px">Data as of '+new Date(t).toLocaleString()+'</div>';
+  var skipHtml=hasR?(skipped.length?'<div class="wkSub" style="margin-top:8px">Skipped as correlated:<br>'+skipped.join('<br>')+'</div>':''):'<div class="wkSub" style="margin-top:8px">This saved scan has no correlation data, so the shared-currency rule was used. Re-run the scan.</div>';
+  document.getElementById('wkPicks').innerHTML=picks.map(function(r){return '<div class="wkRow"><span><span class="'+(r.dir>0?'wkL':'wkS')+'">'+(r.dir>0?'Long':'Short')+' '+r.p+'</span><br><span class="wkSub">'+r.b+(r.sp4>0?' stronger':' weaker')+' than '+r.q+' · '+r.x.toFixed(1)+' ATR from EMA50</span></span><span class="mono" style="font-weight:700">'+r.score+'</span></div>'}).join('')+skipHtml+'<div class="wkSub" style="margin-top:6px">Data as of '+new Date(t).toLocaleString()+'</div>';
   var order=cur.slice().sort(function(a,b){return s4[b]-s4[a]});
   document.getElementById('wkStrength').innerHTML='<div class="wkSub mono" style="margin-top:10px">'+order.map(function(c){return c+' '+(s4[c]>=0?'+':'')+s4[c].toFixed(2)+'%'}).join(' · ')+'</div>';
   document.getElementById('wkTable').innerHTML='<table class="wkTbl" style="margin-top:10px"><tr><th>Pair</th><th>Dir</th><th>Score</th><th>4W</th><th>1W</th><th>Trend</th><th>ATR</th></tr>'+rows.map(function(r){return '<tr class="'+(r.pick?'pk':'')+'"><td>'+r.p+'</td><td class="'+(r.dir>0?'wkL':'wkS')+'">'+(r.dir>0?'L':'S')+'</td><td>'+r.score+'</td><td>'+r.sp4.toFixed(2)+'</td><td>'+r.sp1.toFixed(2)+'</td><td>'+r.tr+'/20</td><td>'+r.x.toFixed(1)+'</td></tr>'}).join('')+'</table>';
